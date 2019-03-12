@@ -1,0 +1,4 @@
+{
+    "python.pythonPath": "C:\\Python27\\python.exe",
+    "python.autoComplete.extraPaths" : ["C:\\Users\\kts1m\\AppData\\Local\\Google\\Cloud SDK\\google-cloud-sdk\\platform\\google_appengine\\lib"]
+}

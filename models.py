@@ -10,3 +10,4 @@ class stream(ndb.Model):
 class userSub(ndb.Model):
     Id = ndb.StringProperty()
     subscribedStream = ndb.KeyProperty(repeated = True, indexed = False)
+

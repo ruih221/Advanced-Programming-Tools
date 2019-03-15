@@ -2,14 +2,19 @@
 import cgi
 import jinja2
 import webapp2
+import cloudstorage as gcs
 
 import os
+import logging
 import urllib
+from urlparse import urlparse
+import json
 
 from models import stream, userSub
 
 from google.appengine.ext import ndb
 from google.appengine.api import users
+from google.appengine.api import app_identity
 
 JINJA_ENVIRONMENT = jinja2.Environment(
   loader=jinja2.FileSystemLoader(os.path.dirname(__file__)),
@@ -20,7 +25,8 @@ JINJA_ENVIRONMENT = jinja2.Environment(
 # [END imports]
 
 
-DEFAULT_STREAM_NAME='public stream'
+DEFAULT_STREAM_NAME = 'public stream'
+DEFAULT_PAGE_RANGE = 4
 def get_stream_key(stream_name=DEFAULT_STREAM_NAME):
   return ndb.Key('stream', stream_name)
 
@@ -32,6 +38,12 @@ class Management(webapp2.RequestHandler):
       userId = user.email()
       url = users.create_logout_url('/')
       url_linktext = 'Logout'
+      subscribedStream = userSub.query(userSub.Id == user.email()).get()
+
+      # create user subscription if not already created 
+      if subscribedStream == None:
+        sub = userSub(Id = user.email(), subscribedStream = [])
+        sub.put()
     else:
       self.redirect('/')
       return
@@ -67,6 +79,88 @@ class CreateNewStream(webapp2.RequestHandler):
     self.redirect('/manage')
 #[END create_new_stream]
 
+#[START upload_image]
+class UploadImage(webapp2.RequestHandler):
+  def post(self):
+    images = self.request.POST.getall('file')
+    streamId = self.request.get('streamid')
+    bucket_name = os.environ.get('BUCKET_NAME',
+                               app_identity.get_default_gcs_bucket_name())
+    write_retry_params = gcs.RetryParams(backoff_factor=1.1)
+    #TODO: add duplicate detection
+    for img in images:
+      fileName = '/' + bucket_name + '/' + streamId + '/' + img.filename
+      gcs_file = gcs.open(fileName, 
+                          'w',
+                          content_type = img.type,
+                          retry_params = write_retry_params)
+      gcs_file.write(img.file.read())
+      gcs_file.close()
+
+
+
+#[END upload_image]
+
+#[START get_more_images]
+def getMoreImages(streamId, pageRange = DEFAULT_PAGE_RANGE, markers=''):
+  bucket_name = os.environ.get('BUCKET_NAME',
+                               app_identity.get_default_gcs_bucket_name())
+  streamPath = '/' +bucket_name + '/' + streamId
+  imageUrls = []
+  publicAccesAPI = 'https://storage.googleapis.com'
+  try:
+    images = gcs.listbucket(streamPath, max_keys = pageRange, marker = markers)
+  except:
+    return None
+  
+  for img in images:
+    imageUrls.append(publicAccesAPI + urllib.quote(img.filename))
+  
+  return imageUrls
+#[END get_more_images]
+
+#[START load_more]
+class loadMore(webapp2.RequestHandler):
+  def get(self):
+    streamId = self.request.get('streamid')
+    marker = self.request.get('marker')
+    marker = urlparse(marker).path
+    marker = urllib.unquote(marker)
+    imgList = getMoreImages(streamId = streamId, markers = marker)
+    # send response back as json 
+    self.response.write(json.dumps({'images' : imgList}))
+
+#[END load_more]
+
+#[START View]
+class View(webapp2.RequestHandler):
+  def get(self):
+    user = users.get_current_user()
+    if user:
+      userId = user.email()
+      url = users.create_logout_url('/')
+      url_linktext = 'Logout'
+    else:
+      self.redirect('/manage')
+      return
+
+    streamId = self.request.get("streamid")
+    pageRange = self.request.get("pagerange", default_value = DEFAULT_PAGE_RANGE)
+    imgUrls = []
+    if streamId:
+      imgUrls = getMoreImages(streamId, pageRange)
+    # self.response.write(imgUrls)
+    template_values = {
+      'url' : url,
+      'url_linktext' : url_linktext,
+      'streamId' : streamId,
+      'imageUrls' : imgUrls
+    }
+    template = JINJA_ENVIRONMENT.get_template('view.html')
+    self.response.write(template.render(template_values))
+#[END View]
+
+
 #[START main_page]
 class MainPage(webapp2.RequestHandler):
   def get(self):
@@ -76,7 +170,7 @@ class MainPage(webapp2.RequestHandler):
       subscribedStream = userSub.query(userSub.Id == user.email()).get()
 
       # create user subscription if not already created 
-      if subscribedStream != None:
+      if subscribedStream == None:
         sub = userSub(Id = user.email(), subscribedStream = [])
         sub.put()
       return
@@ -96,7 +190,10 @@ class MainPage(webapp2.RequestHandler):
 app = webapp2.WSGIApplication([
     ('/', MainPage),
     ('/manage', Management),
-    ('/newstream', CreateNewStream)
+    ('/newstream', CreateNewStream),
+    ('/uploadImage', UploadImage),
+    ('/view', View),
+    ('/loadMore', loadMore)
 ], debug=True)
 
 

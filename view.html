@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+{% autoescape true %}
+<html>
+    <head>
+        <script src="/script/dropzone.js" type="text/javascript"></script>
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+        <script>
+        $(function() {
+            var lastImage = "{{imageUrls|last}}"
+            $("#more-image").click(
+                function(){
+                    $.ajax({
+                        type: "GET",
+                        url: '/loadMore?streamid={{streamId}}&marker='+lastImage,
+                        success: function(data) {
+                            data.images.forEach(
+                                function(img) {
+                                    $("#img-pane").append('<img src=' + img + ' style="display: inline-block;height: 300px; width:200px; margin:0 25px 25px;">');
+                                }
+                            )
+                            lastImage = data.images[data.images.length-1]
+                        },
+                        dataType: "json"
+                    })
+                }
+            )
+        })
+        
+        Dropzone.options.mydrop = {
+            autoProcessQueue: false,
+            paramName: "file",
+            addRemoveLinks: true,
+            dictRemoveFile: "x",
+            maxFilesize: 4,
+            parallelUploads: 10,
+            acceptedFiles: "image/*",
+
+            init: function() {
+                var submitButton = document.querySelector("#submit-image");
+                myDropzone = this;
+
+                submitButton.addEventListener("click", function() {
+                    myDropzone.processQueue(); // Tell Dropzone to process all queued files.
+                });
+                
+                myDropzone.on("complete", function() {
+                    if (myDropzone.getUploadingFiles().length == 0 &&
+                        myDropzone.getQueuedFiles().length == 0) {
+                            setTimeout(function () {
+                                window.location.reload();
+                            }, 100);
+                        }
+                });
+                
+            }
+        }
+        </script>
+    <!-- [START css] -->
+        <link type="text/css" rel="stylesheet" href="/css/dropzone.css">
+    <!-- [END css] -->
+        <style type="text/css">
+            .dz-remove
+            {
+                display:inline-block !important;
+                width:1.2em;
+                height:1.2em;
+                
+                position:absolute;
+                top:5px;
+                right:5px;
+                z-index:1000;
+                
+                font-size:1.2em !important;
+                line-height:1em;
+            
+                text-align:center;
+                font-weight:bold;
+                border:1px solid gray !important;
+                border-radius:1.2em;
+                color:rgb(250, 16, 16);
+                background-color:white;
+                opacity:.5;
+            }
+
+            .dz-remove:hover
+            {
+                text-decoration:none !important;
+                opacity:1;
+            }
+        </style>
+    </head>
+    <body>
+        <a href="{{url}}"> {{url_linktext}} </a>
+        
+        <div id = "img-pane" class = "row" style="display: block; max-width:1000px; margin: 0 auto">
+        {% for image in imageUrls %}
+            <img src={{image}} style="display: inline-block;height: 300px; width:200px; margin:0 25px 25px;">
+            {% endfor %}
+        </div>
+
+        <button type="button" id="more-image">More</button>
+       
+        <form action="/uploadImage?streamid={{streamId}}"
+              class="dropzone"
+              id="mydrop">
+        </form>
+        <button id="submit-image">Submit</button>
+    </body>
+</html>
+{% endautoescape %}

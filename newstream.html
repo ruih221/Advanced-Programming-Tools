@@ -1,12 +1,55 @@
 <!DOCTYPE html>
 {% autoescape true %}
 <html>
+    <head>
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+        <script>
+        </script>
     <!-- [START css] -->
-
-    <!-- [END css -->
-
+    <style type="text/css">
+            .grid-container {
+                display: grid;
+                grid-template-columns: auto auto auto;
+                padding: 10px;
+            }
+            .grid-item {
+                padding: 20px;
+                font-size: 20px;
+                text-align: center;
+            }
+    </style>
+    <!-- [END css] -->
+    </head>
     <body>
-        <a href="{{url|safe}}"> {{url_linktext}} </a>
+        <a href="{{url}}"> {{url_linktext}} </a>
+        
+        <form action='/CreateNewStream' method="post">
+            <div class="grid-container">
+                <div class="grid-item">
+                    <label for="name">Stream Name</label><br>
+                    <input type="text" name="stream-name">
+                </div>
+                <div class="grid-item">
+                    <label for="tags">Tags</label><br>
+                    <input type="text" name="tags" placeholder="#YourTags">
+                </div>
+            </div>
+            <br>
+            <div class="grid-container">
+                <div class="grid-item">
+                    <label for="Subscribers">Add Subscriber</label><br>
+                    <textarea name="Subscribers" rows = 5 cols = 30></textarea><br>
+                    <textarea name="optional message" placeholder="Optional Message to Invite" rows = 5 cols = 30></textarea>
+                </div>
+                <div class="grid-item">
+                    <label for="cover">URL for Stream Cover</label>
+                    <input name="cover">
+                </div>
+            </div>
+            <br>
+            <button id = "create">create</button>
+        </form>
+        
     </body>
 </html>
 {% endautoescape %}

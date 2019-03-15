@@ -15,6 +15,7 @@ from models import stream, userSub
 from google.appengine.ext import ndb
 from google.appengine.api import users
 from google.appengine.api import app_identity
+from google.appengine.api import search
 
 JINJA_ENVIRONMENT = jinja2.Environment(
   loader=jinja2.FileSystemLoader(os.path.dirname(__file__)),
@@ -27,9 +28,42 @@ JINJA_ENVIRONMENT = jinja2.Environment(
 
 DEFAULT_STREAM_NAME = 'public stream'
 DEFAULT_PAGE_RANGE = 4
+DEFAULT_KITTEN = 'https://storage.googleapis.com/aptproj.appspot.com/defaultkitten.jpg'
+
 def get_stream_key(stream_name=DEFAULT_STREAM_NAME):
   return ndb.Key('stream', stream_name)
 
+#[START base]
+class BaseHandler(webapp2.RequestHandler):
+  """ include some helper functions for all other handlers """
+  @classmethod
+  def logged_in(self, handler):
+    def check_user(self, *args, **kwargs):
+      if (users.get_current_user()):
+        handler(self, *args, **kwargs)
+      else:
+        self.redirect("/")
+        return
+    return check_user
+
+  def render_template(self, filename, template_values):
+    template_values.update(self.generateLoggingInfo())
+    template = JINJA_ENVIRONMENT.get_template(filename)
+    self.response.write(template.render(template_values))
+
+  def generateLoggingInfo(self):
+    if (users.get_current_user()):
+      url = users.create_logout_url('/')
+      url_linktext = 'logout'
+    else:
+      url = users.create_login_url(self.request.uri)
+      url_linktext = 'login'
+    return {
+      'url' : url,
+      'url_linktext': url_linktext
+    }
+
+#[END base]
 #[START management_page]
 class Management(webapp2.RequestHandler):
   def get(self):
@@ -63,6 +97,7 @@ class Management(webapp2.RequestHandler):
 #[START create_new_stream]
 class CreateNewStream(webapp2.RequestHandler):
   def post(self):
+    user = users.get_current_user()
     NewStreamName = self.request.get('name')
     if stream.query(stream.name == NewStreamName).get() != None:
       # need to modify later to redirect to error page
@@ -72,12 +107,41 @@ class CreateNewStream(webapp2.RequestHandler):
     # remove white space and # sign
     tag = [x.strip()[1:] for x in tag.split(',')]
     owner = user.email()
-    cover = self.request.get('cover')
+    cover = self.request.get('cover', default_value = DEFAULT_KITTEN)
     newStream = stream(name = NewStreamName, tags = tag, owner = owner, cover = cover)
     newStream.put()
     # handle subscription later here
     self.redirect('/manage')
 #[END create_new_stream]
+
+#[START new_stream]
+class newStream(webapp2.RequestHandler):
+  def get(self):
+    user = users.get_current_user()
+    if user:
+      userId = user.email()
+      url = users.create_logout_url('/')
+      url_linktext = 'Logout'
+      # create user subscription if not already created 
+    else:
+      self.redirect('/')
+      return
+
+    template_values = {
+      'url' : url,
+      'url_linktext' : url_linktext
+    }
+    template = JINJA_ENVIRONMENT.get_template('{}.html'.format(self.request.path))
+    self.response.write(template.render(template_values))
+#[END new_stream]
+
+#[START searchStream]
+class searchStream(webapp2.RequestHandler):
+  def get(self):
+    pass
+
+
+#[END searchStream]
 
 #[START upload_image]
 class UploadImage(webapp2.RequestHandler):
@@ -96,9 +160,6 @@ class UploadImage(webapp2.RequestHandler):
                           retry_params = write_retry_params)
       gcs_file.write(img.file.read())
       gcs_file.close()
-
-
-
 #[END upload_image]
 
 #[START get_more_images]
@@ -133,16 +194,17 @@ class loadMore(webapp2.RequestHandler):
 #[END load_more]
 
 #[START View]
-class View(webapp2.RequestHandler):
+class View(BaseHandler):
+  @BaseHandler.logged_in
   def get(self):
-    user = users.get_current_user()
-    if user:
-      userId = user.email()
-      url = users.create_logout_url('/')
-      url_linktext = 'Logout'
-    else:
-      self.redirect('/manage')
-      return
+    # user = users.get_current_user()
+    # if user:
+    #   userId = user.email()
+    #   url = users.create_logout_url('/')
+    #   url_linktext = 'Logout'
+    # else:
+    #   self.redirect('/')
+    #   return
 
     streamId = self.request.get("streamid")
     pageRange = self.request.get("pagerange", default_value = DEFAULT_PAGE_RANGE)
@@ -151,13 +213,14 @@ class View(webapp2.RequestHandler):
       imgUrls = getMoreImages(streamId, pageRange)
     # self.response.write(imgUrls)
     template_values = {
-      'url' : url,
-      'url_linktext' : url_linktext,
+      # 'url' : url,
+      # 'url_linktext' : url_linktext,
       'streamId' : streamId,
       'imageUrls' : imgUrls
     }
-    template = JINJA_ENVIRONMENT.get_template('view.html')
-    self.response.write(template.render(template_values))
+    # template = JINJA_ENVIRONMENT.get_template('view.html')
+    # self.response.write(template.render(template_values))
+    self.render_template('view.html', template_values)
 #[END View]
 
 
@@ -190,10 +253,12 @@ class MainPage(webapp2.RequestHandler):
 app = webapp2.WSGIApplication([
     ('/', MainPage),
     ('/manage', Management),
-    ('/newstream', CreateNewStream),
+    ('/CreateNewStream', CreateNewStream),
     ('/uploadImage', UploadImage),
     ('/view', View),
-    ('/loadMore', loadMore)
+    ('/loadMore', loadMore),
+    ('/newstream', newStream),
+    ('/search', newStream)
 ], debug=True)
 
 

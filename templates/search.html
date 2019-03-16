@@ -6,9 +6,9 @@
     
 {% block content %} 
     <div>
-        <div>found {{number_found}}</div>
+        <div>found {{number_found}} results for {{searchText}}</div>
         {% for stream in search_result %}
-        <a href=/view?{{stream.name}}>
+        <a href={{redirect_url[loop.index0]}}>
             <img src={{stream.cover}}>
         </a>
         {% endfor %}

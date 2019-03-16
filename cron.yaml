@@ -1,0 +1,16 @@
+cron:
+  - description: "update leaderboard statistic"
+    url: /task/updateLeaderBoard
+    schedule: every 5 minutes
+
+  - description: "send digest every 5 minutes"
+    url: /task/senddigest5
+    schedule: every 5 minutes
+
+  - description: "send digest every 1 hour"
+    url: /task/senddigest60
+    schedule: every 1 hour
+
+    - description: "send digest every day"
+    url: /task/senddigest24
+    schedule: every day

@@ -9,6 +9,7 @@ import urllib
 from urlparse import urlparse
 import json
 import re
+import datetime
 
 from models import stream, userSub
 from baseHandler import BaseHandler
@@ -18,6 +19,7 @@ from google.appengine.ext import ndb
 from google.appengine.api import users
 from google.appengine.api import app_identity
 from google.appengine.api import search
+from google.appengine.api import mail
 # [END imports]
 
 DEFAULT_STREAM_NAME = 'public stream'
@@ -86,7 +88,7 @@ class AddSub(BaseHandler):
     stream = stream.query(steram.name == targetStream).get()
     if not stream:
       return
-    userSub.query(Id == user.email()).get().addSub(stream.key)
+    userSub.query(stream.Id == user.email()).get().addSub(stream.key)
     self.redirect(self.requet.uri)
 #[END add_sub]
 
@@ -99,7 +101,7 @@ class RemoveSub(BaseHandler):
     stream = stream.query(steram.name == targetStream).get()
     if not stream:
       return
-    userSub.query(Id == user.email()).get().removeSub(stream.key)
+    userSub.query(stream.Id == user.email()).get().removeSub(stream.key)
     self.redirect(self.requet.uri)
 #[END remove_sub]
 
@@ -134,6 +136,7 @@ class searchStream(BaseHandler):
         return
     
     result = []
+    redirect_url = []
         
     # id = str(stream.query(stream.name=='cat').get().streamID())
     # logging.info(id)
@@ -146,10 +149,12 @@ class searchStream(BaseHandler):
         curDoc = StreamDoc(doc)
         streamId = curDoc.getStreamName()
         result.append(stream.query(stream.name == streamId).get())
-    
+      redirect_url = ['/view?' + urllib.urlencode({'streamid': x.name}) for x in result]
     template_values = {
       'number_found' : result_len,
-      'search_result' : result
+      'search_result' : result,
+      'redirect_url' : redirect_url,
+      'searchText': query
     }
     self.render_template('search.html', template_values)
 #[END searchStream]
@@ -209,7 +214,15 @@ class View(BaseHandler):
   @BaseHandler.check_log_in
   def get(self):
     streamId = self.request.get("streamid")
-    pageRange = self.request.get("pagerange", default_value = DEFAULT_PAGE_RANGE)
+    pageRange = self.request.get("pagerange", DEFAULT_PAGE_RANGE)
+    curStream = stream.query(stream.name == streamId).get()
+    if not curStream:
+      # redirect if stream doesn't exist
+      self.redirect('/')
+      return
+    # increment access frequency and update accessQueue
+    curStream.accessFrequency += 1
+    curStream.accessQueue.append(datetime.datetime.now())
     imgUrls = []
     if streamId:
       imgUrls = getMoreImages(streamId, pageRange)
@@ -219,6 +232,31 @@ class View(BaseHandler):
     }
     self.render_template('view.html', template_values)
 #[END View]
+
+class Trending(BaseHandler):
+  @BaseHandler.check_log_in
+  def get(self):
+    trendingStream = stream.query().order(-stream.accessFrequency).fetch(3)
+    redirect_url = ['/view?' + urllib.urlencode({'streamid': x.name}) for x in trendingStream]
+
+    template_values = {
+      'trendingStream' : trendingStream,
+      'redirect_url' : redirect_url
+    }
+    self.render_template('trending.html', template_values)
+
+
+class addToMailingList(BaseHandler):
+  def post(self):
+    frequency = self.request.POST.get('frequency', 0)
+    user = mailingListUser.query(mailingListUser.Id = users.get_current_user())
+    if not user:
+      user = mailingListUser(Id = users.get_curernt_user().email())
+      user.put()
+    if frequency == 0:
+      user.delete()
+    else:
+      user.frequency = frequency
 
 
 #[START main_page]

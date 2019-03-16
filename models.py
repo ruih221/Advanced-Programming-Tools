@@ -4,7 +4,8 @@ import cloudstorage as gcs
 class stream(ndb.Model):
     name = ndb.StringProperty()
     tags = ndb.StringProperty(repeated = True)
-    accessFrequency = ndb.IntegerProperty(default = 0, indexed = False)
+    accessFrequency = ndb.IntegerProperty(default = 0)
+    accessQueue = ndb.DateTimeProperty(repeated = True, indexed = False)
     owner = ndb.StringProperty()
     cover = ndb.StringProperty(default = '', indexed = False)
     
@@ -27,3 +28,6 @@ class userSub(ndb.Model):
     def addSub(self, key):
         self.subscribedStream.append(key)
 
+class mailingListUser(ndb.Model):
+    Id = ndb.StringProperty()
+    frequency = ndb.IntegerProperty(indexed=False, default = 5)

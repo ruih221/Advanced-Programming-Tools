@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+{% autoescape true %}
+<html>
+    <head>
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+        <script src="/static/Bootstrap/js/bootstrap.bundle.min.js"></script>
+        {% block head %} {% endblock %}
+        <link type="text/css" rel="stylesheet" href="/static/Bootstrap/css/bootstrap.min.css">
+        <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+        <meta charset="utf-8">
+        <!-- STYLE START -->
+        <style type="text/css">
+          body { padding-top: 70px; }
+        </style>
+        <!-- style END -->
+    </head>
+    <body>
+        <div class = "container-fluid">
+          <nav class="navbar fixed-top navbar-expand-lg navbar-dark" style="background-color: #52096eb9;">
+            <a class="navbar-brand" href="/">StreamShare!</a>
+            <ul class="navbar-nav mr-auto">
+              <li class="nav-item">
+                <a class="nav-link" href="/manage">Manage</a>
+              </li>
+              <li class="nav-item">
+                <a class="nav-link" href="/newstream">Create</a>
+              </li>
+              <li class="nav-item">
+                <a class="nav-link" href="#">View</a>
+              </li>
+              <li class="nav-item">
+                  <a class="nav-link" href="/search">Search</a>
+              </li>
+              <li class="nav-item">
+                  <a class="nav-link" href="#">Trending</a>
+              </li>
+              <li class="nav-item">
+                  <a class="nav-link" href="#">Social</a>
+              </li>
+            </ul>
+            <!-- implicit submission -->
+            <form action=/search method="get" class="form-inline my-2 my-lg-0">
+                <input name="query" class="form-control mr-sm-2" type="search" placeholder="Search" aria-label="Search">
+            </form>
+            <a class="btn btn-outline-warning" href={{url}}>{{url_linktext}}</a>
+          </nav>
+          {% block content %} {% endblock %}
+        </div>
+    </body>
+</html>
+{% endautoescape %}

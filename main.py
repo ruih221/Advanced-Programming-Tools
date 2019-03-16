@@ -11,7 +11,7 @@ app = webapp2.WSGIApplication([
     ('/view', View),
     ('/loadMore', loadMore),
     ('/newstream', newStream),
-    ('/search', newStream)
+    ('/search', searchStream)
 ], debug=True)
 
 

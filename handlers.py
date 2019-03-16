@@ -8,9 +8,11 @@ import logging
 import urllib
 from urlparse import urlparse
 import json
+import re
 
 from models import stream, userSub
 from baseHandler import BaseHandler
+from docs import *
 
 from google.appengine.ext import ndb
 from google.appengine.api import users
@@ -21,6 +23,7 @@ from google.appengine.api import search
 DEFAULT_STREAM_NAME = 'public stream'
 DEFAULT_PAGE_RANGE = 4
 DEFAULT_KITTEN = 'https://storage.googleapis.com/aptproj.appspot.com/defaultkitten.jpg'
+DEAFULT_LIMIT = 10
 
 def get_stream_key(stream_name=DEFAULT_STREAM_NAME):
   return ndb.Key('stream', stream_name)
@@ -40,21 +43,65 @@ class Management(BaseHandler):
 class CreateNewStream(BaseHandler):
   def post(self):
     user = users.get_current_user()
-    NewStreamName = self.request.get('name')
+    NewStreamName = self.request.get('stream-name')
     if stream.query(stream.name == NewStreamName).get() != None:
       # need to modify later to redirect to error page
       self.response.write("already exist")
     
     tag = self.request.get('tags')
     # remove white space and # sign
-    tag = [x.strip()[1:] for x in tag.split(',')]
+    tag = re.sub(r'#', ' ', tag)
+    tag = re.sub(r'[\,\.]+', ' ', tag).lower()
+    tag = tag.split()
     owner = user.email()
-    cover = self.request.get('cover', default_value = DEFAULT_KITTEN)
+    cover = self.request.get('cover')
+    if not cover:
+      cover = DEFAULT_KITTEN
     newStream = stream(name = NewStreamName, tags = tag, owner = owner, cover = cover)
     newStream.put()
+    StreamDoc.createStream(str(newStream.streamID()), NewStreamName, tag)
     # handle subscription later here
-    self.redirect('/manage')
+    self.redirect('/newstream')
 #[END create_new_stream]
+
+#[START delete_stream]
+class DeleteStream(BaseHandler):
+  def post(self):
+    user = users.get_curernt_user()
+    streamList = self.request.POST.getall('steramToDelete')
+    for stream in streamList:
+      if not stream:
+        continue
+      s = stream.query(stream.name == stream).get()
+      doc_id = str(s.streamId())
+      StreamDoc.removeStream(doc_id)
+      s.delete()
+#[END delete_stream]
+
+#[START add_sub]
+class AddSub(BaseHandler):
+  def post(self):
+    user = users.get_curernt_user()
+    targetStream = self.request.get('subscribe')
+    stream = stream.query(steram.name == targetStream).get()
+    if not stream:
+      return
+    userSub.query(Id == user.email()).get().addSub(stream.key)
+    self.redirect(self.requet.uri)
+#[END add_sub]
+
+
+#[START remove_sub]
+class RemoveSub(BaseHandler):
+  def post(self):
+    user = users.get_curernt_user()
+    targetStream = self.request.get('unsubscribe')
+    stream = stream.query(steram.name == targetStream).get()
+    if not stream:
+      return
+    userSub.query(Id == user.email()).get().removeSub(stream.key)
+    self.redirect(self.requet.uri)
+#[END remove_sub]
 
 #[START new_stream]
 class newStream(BaseHandler):
@@ -64,11 +111,47 @@ class newStream(BaseHandler):
 #[END new_stream]
 
 #[START searchStream]
-class searchStream(webapp2.RequestHandler):
+class searchStream(BaseHandler):
+  @BaseHandler.check_log_in 
   def get(self):
-    pass
+    query = self.request.get('query')
+    result_len = 0
+    if query:
+      try:
+        # sort by relevance, display top 10 results
+        sortopt = search.SortOptions(match_scorer=search.MatchScorer())
+        search_query = search.Query(
+          query_string = query.strip(),
+          options = search.QueryOptions(
+            offset = 0,
+            sort_options=sortopt
+          )
+        )
+        search_results = StreamDoc.getIndex().search(search_query)
+        result_len = search_results.number_found
+      except search.Error:
+        logging.info('search error')
+        return
+    
+    result = []
+        
+    # id = str(stream.query(stream.name=='cat').get().streamID())
+    # logging.info(id)
+    # doc = StreamDoc.getDocById(id)
+    # logging.info(doc.field('name').value)
 
-
+    if result_len:
+      for doc in search_results:
+        # create document manager to access helper method 
+        curDoc = StreamDoc(doc)
+        streamId = curDoc.getStreamName()
+        result.append(stream.query(stream.name == streamId).get())
+    
+    template_values = {
+      'number_found' : result_len,
+      'search_result' : result
+    }
+    self.render_template('search.html', template_values)
 #[END searchStream]
 
 #[START upload_image]

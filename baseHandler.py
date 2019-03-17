@@ -25,12 +25,12 @@ class BaseHandler(webapp2.RequestHandler):
     def check_user(self, *args, **kwargs):
       user = users.get_current_user()
       if user:
-        # create user subscription if not already created 
-        subscribedStream = userSub.query(userSub.Id == user.email()).get()
-        if subscribedStream == None:
-          sub = userSub(Id = user.email(), subscribedStream = [])
-          sub.put()
-        # call handlers
+        # # create user subscription if not already created 
+        # subscribedStream = userSub.query(userSub.Id == user.email()).get()
+        # if subscribedStream == None:
+        #   sub = userSub(Id = user.email(), subscribedStream = [])
+        #   sub.put()
+        # # call handlers
         handler(self, *args, **kwargs)
       else:
         self.redirect("/")

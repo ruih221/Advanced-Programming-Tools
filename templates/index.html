@@ -1,12 +1,42 @@
 <!DOCTYPE html>
 {% autoescape true %}
 <html>
-    <!-- [START css] -->
-
-    <!-- [END css -->
-
+    <head>
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+        <script src="/static/Bootstrap/js/bootstrap.bundle.min.js"></script>
+        <link type="text/css" rel="stylesheet" href="/static/Bootstrap/css/bootstrap.min.css">
+        <link type="text/css" rel="stylesheet" href="/static/css/landingpage.css">
+        <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+        <meta charset="utf-8">
+        <!-- STYLE START -->
+        <style type="text/css">
+        </style>
+        <!-- style END -->
+    </head>
     <body>
-        <a href="{{url|safe}}"> {{url_linktext}} </a>
+        <div class="cover-container d-flex h-100 p-3 mx-auto flex-column">
+            <header class="masthead mb-auto">
+            <div class="inner">
+                <a href='/'><h3 class="masthead-brand">StreamShare!</h3></a>
+                <nav class="nav nav-masthead justify-content-center">
+                <a href={{url}} class="btn btn-outline-light btn-lg">Login with <i class="fab fa-google" aria-hidden="true"></i></a>
+                </nav>
+            </div>
+            </header>
+    
+            <main role="main" class="inner cover">
+            <h1 class="cover-heading">SteramShare!</h1>
+            <p class="lead">Start sharing your favorite moments. Subscribe to trending streams and more.</p>
+            <p class="lead">
+                <a href="#" class="btn btn-lg btn-secondary">View All Streams</a>
+            </p>
+            </main>
+            
+            <footer class="mastfoot mt-auto">
+            </footer>
+            
+        </div>
     </body>
 </html>
 {% endautoescape %}

@@ -4,32 +4,34 @@
     <head>
         <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
         <script src="/static/Bootstrap/js/bootstrap.bundle.min.js"></script>
+        <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js" integrity="sha256-VazP97ZCwtekAsvgPBSUwPFKdrwD3unUfSGVYrahUqU=" crossorigin="anonymous"></script>
         {% block head %} {% endblock %}
         <link type="text/css" rel="stylesheet" href="/static/Bootstrap/css/bootstrap.min.css">
-        <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
         <meta charset="utf-8">
         <!-- STYLE START -->
         <style type="text/css">
           body { padding-top: 70px; }
+          @media (max-width: 991px) {
+          body {
+            padding-top: 250px;
+          }
+  }
         </style>
         <!-- style END -->
     </head>
-    <body>
-        <div class = "container-fluid">
-          <nav class="navbar fixed-top navbar-expand-lg navbar-dark" style="background-color: #52096eb9;">
+    <header>
+          <nav class="navbar fixed-top navbar-expand-lg navbar-dark" style="background-color: #51096e;">
             <a class="navbar-brand" href="/">StreamShare!</a>
             <ul class="navbar-nav mr-auto">
               <li class="nav-item">
-                <a class="nav-link" href="/manage">Manage</a>
+                <a class="nav-link {% if '/manage' in request_path %} active {% endif %}" href="/manage">Manage</a>
               </li>
               <li class="nav-item">
-                <a class="nav-link" href="/newstream">Create</a>
+                <a class="nav-link {% if '/newstream' in request_path %} active {% endif %}" href="/newstream">Create</a>
               </li>
               <li class="nav-item">
                 <a class="nav-link" href="#">View</a>
-              </li>
-              <li class="nav-item">
-                  <a class="nav-link" href="/search">Search</a>
               </li>
               <li class="nav-item">
                   <a class="nav-link" href="#">Trending</a>
@@ -44,8 +46,11 @@
             </form>
             <a class="btn btn-outline-warning" href={{url}}>{{url_linktext}}</a>
           </nav>
+    </header>
+    <body>
+      <div class = "container-fluid" id='navigation'>
           {% block content %} {% endblock %}
-        </div>
+      </div>
     </body>
 </html>
 {% endautoescape %}

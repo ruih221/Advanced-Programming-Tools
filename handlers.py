@@ -11,7 +11,7 @@ import json
 import re
 import datetime
 
-from models import stream, userSub
+from models import stream, userSub, streamGroup_key
 from baseHandler import BaseHandler
 from docs import *
 
@@ -35,10 +35,18 @@ class Management(BaseHandler):
   @BaseHandler.check_log_in
   def get(self):
     user = users.get_current_user()
-    subscribedStream = userSub.query(userSub.Id == user.email()).get().subscribedStream
-    ownedStream = stream.query(stream.owner == user.email())
-    # code needed after front end is finished
-    self.render_template('management.html', {})
+    subscribedStream = userSub.query(userSub.Id == user.email())
+    quotedSubName = [urllib.quote(x.name) for x in subscribedStream]
+    ownedStream = stream.query(ancestor = streamGroup_key(), filters = stream.owner == user.email())
+    quotedName = [urllib.quote(x.name) for x in ownedStream]
+    logging.info(quotedName)
+    self.render_template('management.html', {
+      'request_path' : self.request.path,
+      'ownedStream' : ownedStream,
+      'subscribedStream' : subscribedStream,
+      'quotedName' : quotedName,
+      'quotedSubName' : quotedSubName
+    })
 #[END management_page]
 
 #[START create_new_stream]
@@ -48,7 +56,7 @@ class CreateNewStream(BaseHandler):
     NewStreamName = self.request.get('stream-name')
     if stream.query(stream.name == NewStreamName).get() != None:
       # need to modify later to redirect to error page
-      self.response.write("already exist")
+      return
     
     tag = self.request.get('tags')
     # remove white space and # sign
@@ -59,7 +67,7 @@ class CreateNewStream(BaseHandler):
     cover = self.request.get('cover')
     if not cover:
       cover = DEFAULT_KITTEN
-    newStream = stream(name = NewStreamName, tags = tag, owner = owner, cover = cover)
+    newStream = stream(parent = streamGroup_key(), name = NewStreamName, tags = tag, owner = owner, cover = cover)
     newStream.put()
     StreamDoc.createStream(str(newStream.streamID()), NewStreamName, tag)
     # handle subscription later here
@@ -69,26 +77,36 @@ class CreateNewStream(BaseHandler):
 #[START delete_stream]
 class DeleteStream(BaseHandler):
   def post(self):
-    user = users.get_curernt_user()
+    user = users.get_current_user()
     streamList = self.request.POST.getall('steramToDelete')
-    for stream in streamList:
-      if not stream:
+    for curStreamName in streamList:
+      if not curStreamName:
         continue
-      s = stream.query(stream.name == stream).get()
-      doc_id = str(s.streamId())
-      StreamDoc.removeStream(doc_id)
-      s.delete()
+      curStream = stream.query(stream.name == curStreamName).get()
+      doc_id = str(curStream.streamID())
+      def _tx():
+        StreamDoc.removeStream(doc_id)
+        curStream.delete()
+      ndb.transaction(_tx)
+    logging.info(streamList)
+    self.redirect('/manage')
 #[END delete_stream]
 
 #[START add_sub]
 class AddSub(BaseHandler):
   def post(self):
-    user = users.get_curernt_user()
+    user = users.get_current_user()
     targetStream = self.request.get('subscribe')
     stream = stream.query(steram.name == targetStream).get()
     if not stream:
       return
-    userSub.query(stream.Id == user.email()).get().addSub(stream.key)
+    
+    # create a new subscribed user only not subscribed yet
+    result = userSub.query(userSub.Id == user.email()).ancestor(stream.key).get()
+    if not result:
+      newSubUser = userSub(parent=stream.key, Id = user.email(), subscribedStream = stream.key)
+      newSubUser.put()
+    # userSub.query(stream.Id == user.email()).get().addSub(stream.key)
     self.redirect(self.requet.uri)
 #[END add_sub]
 
@@ -96,12 +114,15 @@ class AddSub(BaseHandler):
 #[START remove_sub]
 class RemoveSub(BaseHandler):
   def post(self):
-    user = users.get_curernt_user()
+    user = users.get_current_user()
     targetStream = self.request.get('unsubscribe')
-    stream = stream.query(steram.name == targetStream).get()
-    if not stream:
+    curStream = stream.query(steram.name == targetStream).get()
+    if not curStream:
       return
-    userSub.query(stream.Id == user.email()).get().removeSub(stream.key)
+    result = userSub.query(ancestor = curStream.key, filters = userSub.Id == user.email())
+    if result:
+      result.key.delete()
+    
     self.redirect(self.requet.uri)
 #[END remove_sub]
 
@@ -109,7 +130,9 @@ class RemoveSub(BaseHandler):
 class newStream(BaseHandler):
   @BaseHandler.check_log_in
   def get(self):
-    self.render_template('newstream.html', {})
+    self.render_template('newstream.html', {
+      'request_path' : self.request.path
+    })
 #[END new_stream]
 
 #[START searchStream]
@@ -148,26 +171,33 @@ class searchStream(BaseHandler):
         # create document manager to access helper method 
         curDoc = StreamDoc(doc)
         streamId = curDoc.getStreamName()
-        result.append(stream.query(stream.name == streamId).get())
+        targetStream = stream.query(stream.name == streamId).get()
+        if targetStream:
+          result.append(targetStream)
       redirect_url = ['/view?' + urllib.urlencode({'streamid': x.name}) for x in result]
     template_values = {
-      'number_found' : result_len,
+      'number_found' : len(result),
       'search_result' : result,
       'redirect_url' : redirect_url,
-      'searchText': query
+      'searchText': query,
+      'request_path' : self.request.path
     }
     self.render_template('search.html', template_values)
 #[END searchStream]
 
 #[START upload_image]
 class UploadImage(BaseHandler):
+  @BaseHandler.check_log_in
   def post(self):
     images = self.request.POST.getall('file')
+    curStream = stream.query(stream.name == users.get_curernt_user.email())
+    if not curStream:
+      return
     streamId = self.request.get('streamid')
     bucket_name = os.environ.get('BUCKET_NAME',
                                app_identity.get_default_gcs_bucket_name())
     write_retry_params = gcs.RetryParams(backoff_factor=1.1)
-    #TODO: add duplicate detection
+    #TODO add duplicate detection
     for img in images:
       fileName = '/' + bucket_name + '/' + streamId + '/' + img.filename
       gcs_file = gcs.open(fileName, 
@@ -176,6 +206,10 @@ class UploadImage(BaseHandler):
                           retry_params = write_retry_params)
       gcs_file.write(img.file.read())
       gcs_file.close()
+    # update uplaod time and image count
+    curStream.imgCount += len(images)
+    curStream.lastUploadTime = datetime.datetime.now().strftime('%m/%d/%y')
+    
 #[END upload_image]
 
 #[START get_more_images]
@@ -249,7 +283,7 @@ class Trending(BaseHandler):
 class addToMailingList(BaseHandler):
   def post(self):
     frequency = self.request.POST.get('frequency', 0)
-    user = mailingListUser.query(mailingListUser.Id = users.get_current_user())
+    user = mailingListUser.query(mailingListUser.Id == users.get_current_user())
     if not user:
       user = mailingListUser(Id = users.get_curernt_user().email())
       user.put()
@@ -265,12 +299,12 @@ class MainPage(BaseHandler):
     user = users.get_current_user()
     if user:
       self.redirect('manage')
-      subscribedStream = userSub.query(userSub.Id == user.email()).get()
+      # subscribedStream = userSub.query(userSub.Id == user.email()).get()
 
-      # create user subscription if not already created 
-      if subscribedStream == None:
-        sub = userSub(Id = user.email(), subscribedStream = [])
-        sub.put()
+      # # create user subscription if not already created 
+      # if subscribedStream == None:
+      #   sub = userSub(Id = user.email(), subscribedStream = [])
+      #   sub.put()
       return
     else:
       url = users.create_login_url(self.request.uri)

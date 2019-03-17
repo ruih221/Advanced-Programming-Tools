@@ -24,7 +24,7 @@ def updateLeaderboard(BaseHandler):
     def get(self):
         allStreams = stream.query()
         # all date time older than this will be dropped
-        cutoffDT = datetime.datetime.now() - datetime.timedelta(minutes=DEFAULT_TIME_INTERVAL)
+        cutoffDT = datetime.datetime.now() - datetime.timedelta(seconds=10)
         for curStream in allStreams:
             accessQueue = curStream.accessQueue
             while (len(accessQueue) != 0 and accessQueue[0] < cutoffDT):

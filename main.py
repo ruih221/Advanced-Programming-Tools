@@ -15,6 +15,9 @@ app = webapp2.WSGIApplication([
     ('/search', searchStream),
     ('/addtomailing', addToMailingList),
     ('/trending', Trending),
+    ('/addsub', AddSub),
+    ('/removesub', RemoveSub),
+    ('/deletestream', DeleteStream),
     ('/task/updateLeaderBoard', updateLeaderboard),
     ('/task/senddigest(\d+)', senddigest)
 ], debug=True)

@@ -1,12 +1,42 @@
-<!DOCTYPE html>
-{% autoescape true %}
-<html>
-    <!-- [START css] -->
+{% extends "base.html" %}
 
-    <!-- [END css -->
-
-    <body>
-        <a href="{{url|safe}}"> {{url_linktext}} </a>
-    </body>
-</html>
-{% endautoescape %}
+{% block head %}
+    <script>
+    </script>
+    <title>StreamShare | Management</title>
+{% endblock %}
+    
+{% block content %} 
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+            <h3>
+                Stream I own
+            </h3>
+            <form role="form" action='/deletestream' method='post'>
+            <table class='table table-hover'>
+                <thead>
+                    <tr>
+                        <th scope="col">Name</th>
+                        <th scope="col">Last New Picture</th>
+                        <th scope="col">Number of Pictures</th>
+                        <th scope="col">Delete</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for stream in ownedStream %}
+                    <tr>
+                        <td><a href='/view?{{quotedName[loop.index0]}}'>{{stream.name}}</a></td>
+                        <td>{{stream.lastUploadTime}}</td>
+                        <td>{{stream.imgCount}}</td>
+                        <td><input type='checkbox' class="form-check-input" name='steramToDelete' value={{stream.name}}></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <button type="submit" class='btn btn-danger'>Delete Selected Stream</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

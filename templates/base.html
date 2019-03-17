@@ -12,9 +12,15 @@
         <!-- STYLE START -->
         <style type="text/css">
           body { padding-top: 70px; }
+          
           @media (max-width: 991px) {
           body {
             padding-top: 250px;
+          }
+
+          @media (max-width: 432px) {
+          body {
+            padding-top: 350px;
           }
   }
         </style>
@@ -48,7 +54,7 @@
           </nav>
     </header>
     <body>
-      <div class = "container-fluid" id='navigation'>
+      <div class = "container-fluid" id = "main_content">
           {% block content %} {% endblock %}
       </div>
     </body>

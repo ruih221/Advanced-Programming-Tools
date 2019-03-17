@@ -20,6 +20,8 @@ from google.appengine.api import users
 from google.appengine.api import app_identity
 from google.appengine.api import search
 from google.appengine.api import mail
+from google.appengine.api import images
+from google.appengine.ext import blobstore
 # [END imports]
 
 DEFAULT_STREAM_NAME = 'public stream'
@@ -35,11 +37,15 @@ class Management(BaseHandler):
   @BaseHandler.check_log_in
   def get(self):
     user = users.get_current_user()
-    subscribedStream = userSub.query(userSub.Id == user.email())
-    quotedSubName = [urllib.quote(x.name) for x in subscribedStream]
+    allStreams = stream.query(ancestor = streamGroup_key()).fetch()
+    subscribedStream = []
+    quotedSubName = []
+    for curStream in allStreams:
+      if userSub.query(ancestor = curStream.key, filters = userSub.Id == user.email()).get():
+        subscribedStream.append(curStream)
+        quotedSubName.append(urllib.quote(curStream.name))
     ownedStream = stream.query(ancestor = streamGroup_key(), filters = stream.owner == user.email())
     quotedName = [urllib.quote(x.name) for x in ownedStream]
-    logging.info(quotedName)
     self.render_template('management.html', {
       'request_path' : self.request.path,
       'ownedStream' : ownedStream,
@@ -82,6 +88,7 @@ class DeleteStream(BaseHandler):
     for curStreamName in streamList:
       if not curStreamName:
         continue
+      self.deleteImages(curStreamName)
       curStream = stream.query(stream.name == curStreamName).get()
       doc_id = str(curStream.streamID())
       def _tx():
@@ -90,24 +97,52 @@ class DeleteStream(BaseHandler):
       ndb.transaction(_tx)
     logging.info(streamList)
     self.redirect('/manage')
+  
+  def deleteImages(self, streamId):
+    bucket_name = os.environ.get('BUCKET_NAME',
+                               app_identity.get_default_gcs_bucket_name())
+    streamPath = '/' + bucket_name + '/' + streamId
+    cloudImages = gcs.listbucket(streamPath)
+    for img in cloudImages:
+      try:
+        blobkey = blobstore.create_gs_key('/gs{}'.format(img.filename))
+        logging.info(blobkey)
+        images.delete_serving_url(blobkey)
+      except:
+        return
+      try:
+        gcs.delete(img.filename)
+      except:
+        logging.info('tried to delete cloud storage in local')
+    try:
+      gcs.delete(streamPath)
+    except:
+      logging.info('tried to delete cloud storage in local')
+
+
+    
+
 #[END delete_stream]
 
 #[START add_sub]
 class AddSub(BaseHandler):
   def post(self):
     user = users.get_current_user()
+    if not user:
+      self.redirect(create_login_url('/manage'))
+      return
     targetStream = self.request.get('subscribe')
-    stream = stream.query(steram.name == targetStream).get()
-    if not stream:
+    curStream = stream.query(stream.name == targetStream).get()
+    if not curStream:
       return
     
     # create a new subscribed user only not subscribed yet
-    result = userSub.query(userSub.Id == user.email()).ancestor(stream.key).get()
+    result = userSub.query(ancestor = curStream.key, filters = userSub.Id == user.email()).get()
     if not result:
-      newSubUser = userSub(parent=stream.key, Id = user.email(), subscribedStream = stream.key)
+      newSubUser = userSub(parent=curStream.key, Id = user.email(), subscribedStream = curStream.key)
       newSubUser.put()
-    # userSub.query(stream.Id == user.email()).get().addSub(stream.key)
-    self.redirect(self.requet.uri)
+
+    self.redirect('/view?' + urllib.urlencode({"streamid" : targetStream}))
 #[END add_sub]
 
 
@@ -115,15 +150,19 @@ class AddSub(BaseHandler):
 class RemoveSub(BaseHandler):
   def post(self):
     user = users.get_current_user()
-    targetStream = self.request.get('unsubscribe')
-    curStream = stream.query(steram.name == targetStream).get()
-    if not curStream:
-      return
-    result = userSub.query(ancestor = curStream.key, filters = userSub.Id == user.email())
-    if result:
-      result.key.delete()
-    
-    self.redirect(self.requet.uri)
+    targetStream = self.request.POST.getall('unsubscribe')
+    isSingle = self.request.get('single')
+    for curStream in targetStream:
+      streamToSubscribe = stream.query(ancestor = streamGroup_key(), filters = stream.name == curStream).get()
+      if not streamToSubscribe:
+        continue
+      result = userSub.query(ancestor = streamToSubscribe.key, filters = userSub.Id == user.email()).get()
+      if result:
+        result.key.delete()
+    if not isSingle:
+      self.redirect('/manage')
+    else:
+      self.redirect('/view?' + urllib.urlencode({"streamid" : targetStream[0]}))
 #[END remove_sub]
 
 #[START new_stream]
@@ -190,10 +229,10 @@ class UploadImage(BaseHandler):
   @BaseHandler.check_log_in
   def post(self):
     images = self.request.POST.getall('file')
-    curStream = stream.query(stream.name == users.get_curernt_user.email())
+    streamId = self.request.get('streamid')
+    curStream = stream.query(stream.name == streamId)
     if not curStream:
       return
-    streamId = self.request.get('streamid')
     bucket_name = os.environ.get('BUCKET_NAME',
                                app_identity.get_default_gcs_bucket_name())
     write_retry_params = gcs.RetryParams(backoff_factor=1.1)
@@ -213,21 +252,25 @@ class UploadImage(BaseHandler):
 #[END upload_image]
 
 #[START get_more_images]
-def getMoreImages(streamId, pageRange = DEFAULT_PAGE_RANGE, markers=''):
+def getMoreImages(streamId, pageRange = DEFAULT_PAGE_RANGE, marker=0):
   bucket_name = os.environ.get('BUCKET_NAME',
                                app_identity.get_default_gcs_bucket_name())
   streamPath = '/' +bucket_name + '/' + streamId
-  imageUrls = []
-  publicAccesAPI = 'https://storage.googleapis.com'
   try:
-    images = gcs.listbucket(streamPath, max_keys = pageRange, marker = markers)
+    cloudImages = gcs.listbucket(streamPath)
   except:
     return None
-  
-  for img in images:
-    imageUrls.append(publicAccesAPI + urllib.quote(img.filename))
-  
-  return imageUrls
+  # access images by creation time
+  servingUrl = []
+  img_bucket = []
+  for img in cloudImages:
+    img_bucket.append(img)
+
+  img_bucket.sort(key = lambda x : (x.st_ctime), reverse = True)
+  for i in range(marker, min(marker + pageRange, len(img_bucket))):
+    servingUrl.append(images.get_serving_url(blobstore.create_gs_key('/gs{}'.format(img_bucket[i].filename))))
+
+  return servingUrl
 #[END get_more_images]
 
 #[START load_more]
@@ -235,9 +278,7 @@ class loadMore(BaseHandler):
   def get(self):
     streamId = self.request.get('streamid')
     marker = self.request.get('marker')
-    marker = urlparse(marker).path
-    marker = urllib.unquote(marker)
-    imgList = getMoreImages(streamId = streamId, markers = marker)
+    imgList = getMoreImages(streamId = streamId, marker = int(marker))
     # send response back as json 
     self.response.write(json.dumps({'images' : imgList}))
 
@@ -245,15 +286,24 @@ class loadMore(BaseHandler):
 
 #[START View]
 class View(BaseHandler):
-  @BaseHandler.check_log_in
   def get(self):
     streamId = self.request.get("streamid")
     pageRange = self.request.get("pagerange", DEFAULT_PAGE_RANGE)
-    curStream = stream.query(stream.name == streamId).get()
+    curStream = stream.query(ancestor = streamGroup_key(), filters = stream.name == streamId).get()
     if not curStream:
       # redirect if stream doesn't exist
       self.redirect('/')
       return
+    # check if user if the owner or subscriber
+    user = users.get_current_user()
+    if user:
+      isOwner = user.email() == curStream.owner
+      isSub = False
+      if userSub.query(ancestor = curStream.key, filters = userSub.Id == user.email()).get():
+        isSub = True
+    else:
+      isOwner = False
+      isSub = False
     # increment access frequency and update accessQueue
     curStream.accessFrequency += 1
     curStream.accessQueue.append(datetime.datetime.now())
@@ -262,7 +312,9 @@ class View(BaseHandler):
       imgUrls = getMoreImages(streamId, pageRange)
     template_values = {
       'streamId' : streamId,
-      'imageUrls' : imgUrls
+      'imageUrls' : imgUrls,
+      'isOwner' : isOwner,
+      'isSub' : isSub
     }
     self.render_template('view.html', template_values)
 #[END View]

@@ -26,7 +26,7 @@
                 <tbody>
                     {% for stream in ownedStream %}
                     <tr>
-                        <td><a href='/view?{{quotedName[loop.index0]}}'>{{stream.name}}</a></td>
+                        <td><a href='/view?streamid={{quotedName[loop.index0]}}'>{{stream.name}}</a></td>
                         <td>{{stream.lastUploadTime}}</td>
                         <td>{{stream.imgCount}}</td>
                         <td><input type='checkbox' class="form-check-input" name='steramToDelete' value={{stream.name}}></td>
@@ -34,8 +34,39 @@
                     {% endfor %}
                 </tbody>
             </table>
-            <button type="submit" class='btn btn-danger'>Delete Selected Stream</button>
+            <button type="submit" class='btn btn-danger'>Delete Chceked Streams</button>
             </form>
+        </div>
+
+        <div class="col-md-12 pt-5">
+                <h3>
+                    Stream I subscribe to 
+                </h3>
+                <form role="form" action='/removesub' method='post'>
+                <table class='table table-hover'>
+                    <thead>
+                        <tr>
+                            <th scope="col">Name</th>
+                            <th scope="col">Last New Picture</th>
+                            <th scope="col">Number of Pictures</th>
+                            <th scope="col">Views</th>
+                            <th scope="col">Unubscribe</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for stream in subscribedStream %}
+                        <tr>
+                            <td><a href='/view?streamid={{quotedSubName[loop.index0]}}'>{{stream.name}}</a></td>
+                            <td>{{stream.lastUploadTime}}</td>
+                            <td>{{stream.imgCount}}</td>
+                            <td>{{stream.accessFrequency}}</td>
+                            <td><input type='checkbox' class="form-check-input" name='unsubscribe' value={{stream.name}}></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <button type="submit" class='btn btn-danger'>Unsubscribe to checked Streams</button>
+                </form>
         </div>
     </div>
 </div>

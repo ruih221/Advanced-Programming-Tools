@@ -10,6 +10,7 @@ app = webapp2.WSGIApplication([
     ('/CreateNewStream', CreateNewStream),
     ('/uploadImage', UploadImage),
     ('/view', View),
+    ('/viewall', viewall),
     ('/loadMore', loadMore),
     ('/newstream', newStream),
     ('/search', searchStream),

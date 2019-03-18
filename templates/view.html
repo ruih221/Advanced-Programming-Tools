@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-
 {% block head %}
+<title>StreamShare! | {{streamId}}</title>
 <script src="/static/js/dropzone.js" type="text/javascript"></script>
 <script>
     var marker = {{imageUrls|length}}
@@ -9,7 +9,7 @@
             function(){
                 $.ajax({
                     type: "GET",
-                    url: '/loadMore?streamid={{streamId}}&marker='+marker,
+                    url: '/loadMore?streamid={{quotedStreamId}}&marker='+marker,
                     success: function(data) {
                         data.images.forEach(
                             function(img) {
@@ -49,8 +49,16 @@
                 myDropzone.on("complete", function() {
                     if (myDropzone.getUploadingFiles().length == 0 &&
                         myDropzone.getQueuedFiles().length == 0) {
+                            var imgcount=myDropzone.getAcceptedFiles().length
                             setTimeout(function () {
-                                window.location.reload();
+                                $.ajax({
+                                type: "GET",
+                                url: '/uploadImage?count='+imgcount+'&streamid={{quotedStreamId}}',
+                                success: function(data) {
+                                    window.location.reload()
+                                },
+                                })
+                                // window.location.reload();
                             }, 100);
                         }
                 });
@@ -118,18 +126,18 @@
     <button type="button" class="btn btn-primary my-3" id="more-image">More</button>
     
     {% if isOwner %}
-    <form action="/uploadImage?streamid={{streamId}}"
+    <form action="/uploadImage?streamid={{quotedStreamId}}"
             class="dropzone"
             id="mydrop">
     </form>
     <button class="btn btn-primary my-3" id="submit-image">Submit</button>
     {% elif not isSub %}
     <form action='/addsub' method = 'post'>
-        <button name="subscribe" class="btn btn-primary" value={{streamId}} type="submit">Subscribe</button>
+        <button name="subscribe" class="btn btn-primary" value={{quotedStreamId}} type="submit">Subscribe</button>
     </form>
     {% else %}
     <form action='/removesub?single=true' method ='post'>
-        <button name="unsubscribe" class="btn btn-primary" value={{streamId}} type="submit">Unsubscribe</button>
+        <button name="unsubscribe" class="btn btn-primary" value={{quotedStreamId}} type="submit">Unsubscribe</button>
     </form>
     {% endif %}
 </div>

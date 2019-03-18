@@ -3,46 +3,34 @@
 {% block head %}
     <script>
     </script>
-    <title>StreamShare | New Stream</title>
-    <style type="text/css">
-        .grid-container {
-            display: grid;
-            grid-template-columns: auto auto auto;
-            padding: 10px;
-        }
-        .grid-item {
-            padding: 20px;
-            font-size: 20px;
-            text-align: center;
-        }
-    </style>
+    <title>StreamShare! | New Stream</title>
 {% endblock %}
 
-{% block content %}       
-    <form action='/CreateNewStream' method="post">
-        <div class="grid-container">
-            <div class="grid-item">
+{% block content %}
+<form action='/CreateNewStream' method="post">
+    <div class="row text-center text-lg-left mx-5 mt-3">
+        <div class="col-lg-6 col-md-6 col-12">
+            <div class="form-group">
                 <label for="stream-name">Stream Name</label><br>
-                <input type="text" name="stream-name">
+                <input class="form-control" type="text" name="stream-name">
             </div>
-            <div class="grid-item">
-                <label for="tags">Tags</label><br>
-                <input type="text" name="tags" placeholder="#YourTags">
-            </div>
-        </div>
-        <br>
-        <div class="grid-container">
-            <div class="grid-item">
+            <div class="form-group">
                 <label for="Subscribers">Add Subscriber</label><br>
-                <textarea name="Subscribers" rows = 5 cols = 30></textarea><br>
-                <textarea name="optional message" placeholder="Optional Message to Invite" rows = 5 cols = 30></textarea>
-            </div>
-            <div class="grid-item">
-                <label for="cover">URL for Stream Cover</label>
-                <input type="text" name="cover">
+                <textarea class="form-control" name="Subscribers" rows = 5 cols = 30></textarea><br>
+                <textarea class="form-control" name="optional message" placeholder="Optional Message to Invite" rows = 5 cols = 30></textarea>
             </div>
         </div>
-        <br>
-        <button id = "create">create</button>
-    </form>
+        <div class="col-lg-6 col-md-6 col-12">
+            <div class="form-group">
+                <label for="tags">Tags</label><br>
+                <input class="form-control" type="text" name="tags" placeholder="#YourTags">
+            </div>
+            <div class="form-group">
+                <label for="cover">URL for Stream Cover</label><br>
+                <input class="form-control" type="text" name="cover">
+            </div>
+        </div>
+        <button class="btn btn-primary my-2 ml-3" id = "create">create</button>
+    </div>
+</form>
 {% endblock %}

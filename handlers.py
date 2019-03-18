@@ -74,10 +74,13 @@ class CreateNewStream(BaseHandler):
     if not cover:
       cover = DEFAULT_KITTEN
     newStream = stream(parent = streamGroup_key(), name = NewStreamName, tags = tag, owner = owner, cover = cover)
-    newStream.put()
-    StreamDoc.createStream(str(newStream.streamID()), NewStreamName, tag)
+    def _tx():
+      newStream.put()
+      StreamDoc.createStream(str(newStream.streamID()), NewStreamName, tag)
+    # atomic operation, either all added or none added!
+    ndb.transaction(_tx)
     # handle subscription later here
-    self.redirect('/newstream')
+    self.redirect('/view?' + urllib.urlencode({'streamid' : NewStreamName}))
 #[END create_new_stream]
 
 #[START delete_stream]
@@ -88,14 +91,18 @@ class DeleteStream(BaseHandler):
     for curStreamName in streamList:
       if not curStreamName:
         continue
-      self.deleteImages(curStreamName)
-      curStream = stream.query(stream.name == curStreamName).get()
+      curStreamName = urllib.unquote(curStreamName)
+      try:
+        curStream = stream.query(ancestor = streamGroup_key(), filters = stream.name == curStreamName).get()
+      except:
+        logging.excep('this stream does not exist')
       doc_id = str(curStream.streamID())
       def _tx():
+        self.deleteImages(curStreamName)
         StreamDoc.removeStream(doc_id)
         curStream.delete()
+      # atomic operation, either all are deleted or non deleted!
       ndb.transaction(_tx)
-    logging.info(streamList)
     self.redirect('/manage')
   
   def deleteImages(self, streamId):
@@ -106,7 +113,6 @@ class DeleteStream(BaseHandler):
     for img in cloudImages:
       try:
         blobkey = blobstore.create_gs_key('/gs{}'.format(img.filename))
-        logging.info(blobkey)
         images.delete_serving_url(blobkey)
       except:
         return
@@ -131,7 +137,8 @@ class AddSub(BaseHandler):
     if not user:
       self.redirect(create_login_url('/manage'))
       return
-    targetStream = self.request.get('subscribe')
+    targetStream = urllib.unquote(self.request.get('subscribe'))
+    logging.info(targetStream)
     curStream = stream.query(stream.name == targetStream).get()
     if not curStream:
       return
@@ -153,6 +160,7 @@ class RemoveSub(BaseHandler):
     targetStream = self.request.POST.getall('unsubscribe')
     isSingle = self.request.get('single')
     for curStream in targetStream:
+      curStream = urllib.unquote(curStream)
       streamToSubscribe = stream.query(ancestor = streamGroup_key(), filters = stream.name == curStream).get()
       if not streamToSubscribe:
         continue
@@ -162,7 +170,7 @@ class RemoveSub(BaseHandler):
     if not isSingle:
       self.redirect('/manage')
     else:
-      self.redirect('/view?' + urllib.urlencode({"streamid" : targetStream[0]}))
+      self.redirect('/view?' + urllib.urlencode({"streamid" : urllib.unquote(targetStream[0])}))
 #[END remove_sub]
 
 #[START new_stream]
@@ -230,7 +238,7 @@ class UploadImage(BaseHandler):
   def post(self):
     images = self.request.POST.getall('file')
     streamId = self.request.get('streamid')
-    curStream = stream.query(stream.name == streamId)
+    curStream = stream.query(ancestor = streamGroup_key(), filters = stream.name == streamId).get()
     if not curStream:
       return
     bucket_name = os.environ.get('BUCKET_NAME',
@@ -245,9 +253,19 @@ class UploadImage(BaseHandler):
                           retry_params = write_retry_params)
       gcs_file.write(img.file.read())
       gcs_file.close()
-    # update uplaod time and image count
-    curStream.imgCount += len(images)
+
+  # update imgage counts and last uploadtime upon successful upload
+  @BaseHandler.check_log_in  
+  def get(self):
+    imgCount = self.request.get('count')
+    streamId = self.request.get('streamid')
+    logging.info(imgCount)
+    curStream = stream.query(ancestor = streamGroup_key(), filters = stream.name == streamId).get()
+    if not curStream:
+      return
+    curStream.imgCount += int(imgCount)
     curStream.lastUploadTime = datetime.datetime.now().strftime('%m/%d/%y')
+    curStream.put()
     
 #[END upload_image]
 
@@ -307,17 +325,32 @@ class View(BaseHandler):
     # increment access frequency and update accessQueue
     curStream.accessFrequency += 1
     curStream.accessQueue.append(datetime.datetime.now())
+    curStream.put()
     imgUrls = []
     if streamId:
       imgUrls = getMoreImages(streamId, pageRange)
     template_values = {
       'streamId' : streamId,
+      'quotedStreamId' : urllib.quote(streamId),
       'imageUrls' : imgUrls,
       'isOwner' : isOwner,
       'isSub' : isSub
     }
     self.render_template('view.html', template_values)
 #[END View]
+
+#[START view_all]
+class viewall(BaseHandler):
+  def get(self):
+    allStreams = stream.query(ancestor = streamGroup_key()).fetch()
+    quotedStreamName = [urllib.quote(x.name) for x in allStreams]
+    template_values = {
+      'allstream' : allStreams,
+      'quotedStreamName' : quotedStreamName,
+      'request_path' : self.request.path
+    }
+    self.render_template('viewall.html', template_values)
+#[END view_all]
 
 class Trending(BaseHandler):
   @BaseHandler.check_log_in

@@ -3,7 +3,7 @@
 {% block head %}
     <script>
     </script>
-    <title>StreamShare | Management</title>
+    <title>StreamShare! | Management</title>
 {% endblock %}
     
 {% block content %} 
@@ -29,7 +29,7 @@
                         <td><a href='/view?streamid={{quotedName[loop.index0]}}'>{{stream.name}}</a></td>
                         <td>{{stream.lastUploadTime}}</td>
                         <td>{{stream.imgCount}}</td>
-                        <td><input type='checkbox' class="form-check-input" name='steramToDelete' value={{stream.name}}></td>
+                        <td><input type='checkbox' class="form-check-input" name='steramToDelete' value={{quotedName[loop.index0]}}></td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -60,7 +60,7 @@
                             <td>{{stream.lastUploadTime}}</td>
                             <td>{{stream.imgCount}}</td>
                             <td>{{stream.accessFrequency}}</td>
-                            <td><input type='checkbox' class="form-check-input" name='unsubscribe' value={{stream.name}}></td>
+                            <td><input type='checkbox' class="form-check-input" name='unsubscribe' value="{{quotedSubName[loop.index0]}}"></td>
                         </tr>
                         {% endfor %}
                     </tbody>

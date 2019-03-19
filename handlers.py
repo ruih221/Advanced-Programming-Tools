@@ -11,7 +11,7 @@ import json
 import re
 import datetime
 
-from models import stream, userSub, streamGroup_key
+from models import stream, userSub, streamGroup_key, mailingListUser, mailingUser_group
 from baseHandler import BaseHandler
 from docs import *
 
@@ -26,13 +26,14 @@ from google.appengine.ext import blobstore
 
 DEFAULT_STREAM_NAME = 'public stream'
 DEFAULT_PAGE_RANGE = 4
-DEFAULT_KITTEN = 'https://storage.googleapis.com/aptproj.appspot.com/defaultkitten.jpg'
+# DEFAULT_KITTEN = "https://i.imgur.com/xHxXUjc.jpg"
+DEFAULT_KITTEN = "/static/img/defaultkitten.jpg"
 DEAFULT_LIMIT = 10
 
 def get_stream_key(stream_name=DEFAULT_STREAM_NAME):
   return ndb.Key('stream', stream_name)
 
-#[START management_page]
+# [START management_page]
 class Management(BaseHandler):
   @BaseHandler.check_log_in
   def get(self):
@@ -53,15 +54,50 @@ class Management(BaseHandler):
       'quotedName' : quotedName,
       'quotedSubName' : quotedSubName
     })
-#[END management_page]
+# [END management_page]
 
-#[START create_new_stream]
+# [START add_to_mailing_list]
+class addToMailingList(BaseHandler):
+  @BaseHandler.check_log_in
+  def post(self):
+    frequency = int(self.request.POST.get('frequency', 0))
+    logging.info(frequency)
+    user = mailingListUser.query(mailingListUser.Id == users.get_current_user().email()).get()
+    if not user and frequency != 0:
+      new_mail_user = mailingListUser(parent = mailingUser_group(frequency), Id = users.get_current_user().email(), frequency = frequency)
+      new_mail_user.put()
+      self.redirect('/trending')
+      return
+
+    if user and frequency == 0:
+      user.key.delete()
+    elif user and user.frequency != frequency:
+      user.key.delete()
+      new_mail_user = mailingListUser(parent = mailingUser_group(frequency), Id = users.get_current_user().email(), frequency = frequency)
+      new_mail_user.put()
+    self.redirect('/trending')
+# [END add_to_mailing_list]
+
+# [START create_new_stream]
 class CreateNewStream(BaseHandler):
+  def sendInvitation(self, streamName, subList, sublink, optional_message = None):
+    for invitee in subList:
+      message = mail.EmailMessage(
+        sender = 'subscription_manager@streamshare.appspotmail.com',
+        subject = 'Invitation to Subscribe'
+      )
+      message.to = invitee
+      message.body = '''You are invited to subscribe to the following stream on StreamShare!
+      ''' + streamName + '''link to subscribe: ''' + sublink + '\nLog in to Subscribe!\noptional message:\n' + optional_message
+      message.send()
+
   def post(self):
     user = users.get_current_user()
     NewStreamName = self.request.get('stream-name')
+    subList = self.request.get('Subscribers')
+    optional_message = self.request.get('optional-message')
     if stream.query(stream.name == NewStreamName).get() != None:
-      # need to modify later to redirect to error page
+      self.redirect('/erroradd')
       return
     
     tag = self.request.get('tags')
@@ -79,11 +115,23 @@ class CreateNewStream(BaseHandler):
       StreamDoc.createStream(str(newStream.streamID()), NewStreamName, tag)
     # atomic operation, either all added or none added!
     ndb.transaction(_tx)
-    # handle subscription later here
-    self.redirect('/view?' + urllib.urlencode({'streamid' : NewStreamName}))
-#[END create_new_stream]
+    
+    # send invite to subscribers
+    subList = re.sub(r'[\,]+', ' ', subList).split()
+    logging.info(subList)
+    subLink = self.request.host_url + '/addsub?subscribe=' + urllib.quote(NewStreamName)
+    self.sendInvitation(NewStreamName, subList, subLink, optional_message)
+    self.redirect('/manage')
+# [END create_new_stream]
 
-#[START delete_stream]
+# [START error_add]
+class errorAdd(BaseHandler):
+  def get(self):
+    self.render_template('error.html', {})
+
+# [END error_add]
+
+# [START delete_stream]
 class DeleteStream(BaseHandler):
   def post(self):
     user = users.get_current_user()
@@ -95,7 +143,7 @@ class DeleteStream(BaseHandler):
       try:
         curStream = stream.query(ancestor = streamGroup_key(), filters = stream.name == curStreamName).get()
       except:
-        logging.excep('this stream does not exist')
+        logging.exception('this stream does not exist')
       doc_id = str(curStream.streamID())
       def _tx():
         self.deleteImages(curStreamName)
@@ -124,22 +172,34 @@ class DeleteStream(BaseHandler):
       gcs.delete(streamPath)
     except:
       logging.info('tried to delete cloud storage in local')
+# [END delete_stream]
 
-
-    
-
-#[END delete_stream]
-
-#[START add_sub]
+# [START add_sub]
 class AddSub(BaseHandler):
+  @BaseHandler.check_log_in
+  def get(self):
+    user = users.get_current_user()
+    targetStream = urllib.unquote(self.request.get('subscribe'))
+    curStream = stream.query(ancestor = streamGroup_key(), filters = stream.name == targetStream).get()
+    if not curStream:
+      return
+    
+    # create a new subscribed user only not subscribed yet
+    result = userSub.query(ancestor = curStream.key, filters = userSub.Id == user.email()).get()
+    if not result:
+      newSubUser = userSub(parent=curStream.key, Id = user.email(), subscribedStream = curStream.key)
+      newSubUser.put()
+    self.redirect('/view?' + urllib.urlencode({"streamid" : targetStream}))
+
+
+  @BaseHandler.check_log_in
   def post(self):
     user = users.get_current_user()
     if not user:
-      self.redirect(create_login_url('/manage'))
+      self.redirect(users.create_login_url('/manage'))
       return
     targetStream = urllib.unquote(self.request.get('subscribe'))
-    logging.info(targetStream)
-    curStream = stream.query(stream.name == targetStream).get()
+    curStream = stream.query(ancestor = streamGroup_key(), filters = stream.name == targetStream).get()
     if not curStream:
       return
     
@@ -150,10 +210,10 @@ class AddSub(BaseHandler):
       newSubUser.put()
 
     self.redirect('/view?' + urllib.urlencode({"streamid" : targetStream}))
-#[END add_sub]
+# [END add_sub]
 
 
-#[START remove_sub]
+# [START remove_sub]
 class RemoveSub(BaseHandler):
   def post(self):
     user = users.get_current_user()
@@ -171,18 +231,18 @@ class RemoveSub(BaseHandler):
       self.redirect('/manage')
     else:
       self.redirect('/view?' + urllib.urlencode({"streamid" : urllib.unquote(targetStream[0])}))
-#[END remove_sub]
+# [END remove_sub]
 
-#[START new_stream]
+# [START new_stream]
 class newStream(BaseHandler):
   @BaseHandler.check_log_in
   def get(self):
     self.render_template('newstream.html', {
       'request_path' : self.request.path
     })
-#[END new_stream]
+# [END new_stream]
 
-#[START searchStream]
+# [START searchStream]
 class searchStream(BaseHandler):
   @BaseHandler.check_log_in 
   def get(self):
@@ -208,11 +268,6 @@ class searchStream(BaseHandler):
     result = []
     redirect_url = []
         
-    # id = str(stream.query(stream.name=='cat').get().streamID())
-    # logging.info(id)
-    # doc = StreamDoc.getDocById(id)
-    # logging.info(doc.field('name').value)
-
     if result_len:
       for doc in search_results:
         # create document manager to access helper method 
@@ -230,9 +285,9 @@ class searchStream(BaseHandler):
       'request_path' : self.request.path
     }
     self.render_template('search.html', template_values)
-#[END searchStream]
+# [END searchStream]
 
-#[START upload_image]
+# [START upload_image]
 class UploadImage(BaseHandler):
   @BaseHandler.check_log_in
   def post(self):
@@ -254,22 +309,30 @@ class UploadImage(BaseHandler):
       gcs_file.write(img.file.read())
       gcs_file.close()
 
-  # update imgage counts and last uploadtime upon successful upload
-  @BaseHandler.check_log_in  
-  def get(self):
-    imgCount = self.request.get('count')
-    streamId = self.request.get('streamid')
-    logging.info(imgCount)
-    curStream = stream.query(ancestor = streamGroup_key(), filters = stream.name == streamId).get()
-    if not curStream:
-      return
-    curStream.imgCount += int(imgCount)
-    curStream.lastUploadTime = datetime.datetime.now().strftime('%m/%d/%y')
-    curStream.put()
-    
-#[END upload_image]
+    def _tx():
+      curStream = stream.query(ancestor = streamGroup_key(), filters = stream.name == streamId).get()
+      curStream.imgCount += len(images)
+      curStream.lastUploadTime = datetime.datetime.now().strftime('%m/%d/%y')
+      curStream.put()
+    # has to be updating imagecount has to be atomic operation!
+    ndb.transaction(_tx)
 
-#[START get_more_images]
+  # update imgage counts and last uploadtime upon successful upload
+  # @BaseHandler.check_log_in  
+  # def get(self):
+  #   imgCount = self.request.get('count')
+  #   streamId = self.request.get('streamid')
+  #   logging.info(imgCount)
+  #   curStream = stream.query(ancestor = streamGroup_key(), filters = stream.name == streamId).get()
+  #   if not curStream:
+  #     return
+  #   curStream.imgCount += int(imgCount)
+  #   curStream.lastUploadTime = datetime.datetime.now().strftime('%m/%d/%y')
+  #   curStream.put()
+    
+# [END upload_image]
+
+# [START get_more_images]
 def getMoreImages(streamId, pageRange = DEFAULT_PAGE_RANGE, marker=0):
   bucket_name = os.environ.get('BUCKET_NAME',
                                app_identity.get_default_gcs_bucket_name())
@@ -289,9 +352,9 @@ def getMoreImages(streamId, pageRange = DEFAULT_PAGE_RANGE, marker=0):
     servingUrl.append(images.get_serving_url(blobstore.create_gs_key('/gs{}'.format(img_bucket[i].filename))))
 
   return servingUrl
-#[END get_more_images]
+# [END get_more_images]
 
-#[START load_more]
+# [START load_more]
 class loadMore(BaseHandler):
   def get(self):
     streamId = self.request.get('streamid')
@@ -300,9 +363,9 @@ class loadMore(BaseHandler):
     # send response back as json 
     self.response.write(json.dumps({'images' : imgList}))
 
-#[END load_more]
+# [END load_more]
 
-#[START View]
+# [START View]
 class View(BaseHandler):
   def get(self):
     streamId = self.request.get("streamid")
@@ -337,9 +400,9 @@ class View(BaseHandler):
       'isSub' : isSub
     }
     self.render_template('view.html', template_values)
-#[END View]
+# [END View]
 
-#[START view_all]
+# [START view_all]
 class viewall(BaseHandler):
   def get(self):
     allStreams = stream.query(ancestor = streamGroup_key()).fetch()
@@ -350,35 +413,23 @@ class viewall(BaseHandler):
       'request_path' : self.request.path
     }
     self.render_template('viewall.html', template_values)
-#[END view_all]
+# [END view_all]
 
+# [START trending]
 class Trending(BaseHandler):
-  @BaseHandler.check_log_in
   def get(self):
-    trendingStream = stream.query().order(-stream.accessFrequency).fetch(3)
+    trendingStream = stream.query(ancestor = streamGroup_key()).order(-stream.accessFrequency).fetch(3)
     redirect_url = ['/view?' + urllib.urlencode({'streamid': x.name}) for x in trendingStream]
 
     template_values = {
       'trendingStream' : trendingStream,
-      'redirect_url' : redirect_url
+      'redirect_url' : redirect_url,
+      'request_path' : self.request.path
     }
     self.render_template('trending.html', template_values)
+# [END trending]
 
-
-class addToMailingList(BaseHandler):
-  def post(self):
-    frequency = self.request.POST.get('frequency', 0)
-    user = mailingListUser.query(mailingListUser.Id == users.get_current_user())
-    if not user:
-      user = mailingListUser(Id = users.get_curernt_user().email())
-      user.put()
-    if frequency == 0:
-      user.delete()
-    else:
-      user.frequency = frequency
-
-
-#[START main_page]
+# [START main_page]
 class MainPage(BaseHandler):
   def get(self):
     user = users.get_current_user()

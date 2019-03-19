@@ -1,0 +1,6 @@
+indexes:
+- kind: stream
+  ancestor: yes
+  properties:
+  - name: accessFrequency
+    direction: desc

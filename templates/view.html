@@ -51,14 +51,14 @@
                         myDropzone.getQueuedFiles().length == 0) {
                             var imgcount=myDropzone.getAcceptedFiles().length
                             setTimeout(function () {
-                                $.ajax({
-                                type: "GET",
-                                url: '/uploadImage?count='+imgcount+'&streamid={{quotedStreamId}}',
-                                success: function(data) {
-                                    window.location.reload()
-                                },
-                                })
-                                // window.location.reload();
+                                // $.ajax({
+                                // type: "GET",
+                                // url: '/uploadImage?count='+imgcount+'&streamid={{quotedStreamId}}',
+                                // success: function(data) {
+                                //     window.location.reload()
+                                // },
+                                // })
+                                window.location.reload();
                             }, 100);
                         }
                 });

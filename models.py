@@ -7,6 +7,9 @@ DEFAULT_GROUP_NAME = 'dummy_group'
 def streamGroup_key(group_name=DEFAULT_GROUP_NAME):
     return ndb.Key('streamGroup', group_name)
 
+def mailingUser_group(frequency=5):
+    return ndb.Key('frequency', str(frequency))
+
 class stream(ndb.Model):
     name = ndb.StringProperty()
     tags = ndb.StringProperty(repeated = True)

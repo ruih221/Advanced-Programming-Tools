@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block head %}
+    <title>StreamShare! | Trending</title>
+{% endblock %}
+
+{% block content %}
+<div class = 'mx-5'>
+    <h2>Top 3 Trending Streams</h2>
+    <div id = "img-pane" class = "row text-center text-lg-left mt-3">
+    {% for stream in trendingStream %}
+        <div class="col-lg-3 col-md-4 col-6">
+            <a href="{{redirect_url[loop.index0]}}" class="d-block mb-2">
+                    <img class="img-fluid img-thumbnail" src={{stream.cover}} alt="">
+                    <div class = "col-12">{{stream.name}}</div>
+            </a>
+            <div class = "col-12">{{stream.accessFrequency}} views</div>
+            <div class = "col-12">in past hour</div>
+        </div>
+    {% endfor %}
+        <div class="col-lg-3 col-md-4 col-6">
+            <form action="/addtomailing" method='post'>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="frequency" value=0 checked>
+                    <label class="form-check-label">No Reports</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="frequency" value=5>
+                    <label class="form-check-label">Every 5 minutes</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="frequency" value=60>
+                    <label class="form-check-label">Every 1 hour</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="frequency" value=24>
+                    <label class="form-check-label">Every day</label>
+                </div>
+                <div class="form-check">
+                    <label class="form-check-label">Email trending report</label>
+                </div>
+                <button class="btn btn-primary my-2 ml-3">Update rate</button>                
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

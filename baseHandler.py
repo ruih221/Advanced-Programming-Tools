@@ -33,7 +33,7 @@ class BaseHandler(webapp2.RequestHandler):
         # # call handlers
         handler(self, *args, **kwargs)
       else:
-        self.redirect(users.create_login_url(self.request.uri))
+        self.redirect(users.create_login_url('/manage'))
         return
     return check_user
 

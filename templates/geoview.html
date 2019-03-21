@@ -2,7 +2,6 @@
 
 {% block head %}
 <title>StreamShare! | Geoview</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/OverlappingMarkerSpiderfier-Leaflet/0.2.6/oms.min.js"></script>
 {% endblock %}
 
 {% block additional_style %}
@@ -56,6 +55,7 @@ html, body {
       
       var map;
       var markers = [];
+      var markerCluster;
       function initMap() {
         map = new google.maps.Map(document.getElementById('map'), {
           zoom: 3,
@@ -81,7 +81,7 @@ html, body {
           });
         });
         
-        var markerCluster = new MarkerClusterer(map, markers,
+        markerCluster = new MarkerClusterer(map, markers,
             {imagePath: 'https://developers.google.com/maps/documentation/javascript/examples/markerclusterer/m'});
       }
 
@@ -115,35 +115,41 @@ html, body {
       
       var today = new Date();;
       var then = new Date(new Date().setFullYear(new Date().getFullYear() - 1));
+      console.log(today.getTime())
+      console.log(then.getTime())
+
 
       jsTime = []
       imgTime.forEach(function(time) {
         jsTime.push(new Date(time));
       });
       function updateMap(low, high) {
-        markers.forEach(function(mark, i) {
-          if (jsTime[i] < low || jsTime[i] > high)
-            mark.setMap(null);
-          else
-            mark.setMap(map);
-        });
+        var newMarkers = [];
+        if (markerCluster)
+          markerCluster.clearMarkers();
+        for (var i = 0; i < markers.length; i++) {
+          if (jsTime[i] >= low && jsTime[i] <= high)
+            newMarkers.push(markers[i]);
+        }
+        markerCluster = new MarkerClusterer(map, newMarkers,
+          {imagePath: 'https://developers.google.com/maps/documentation/javascript/examples/markerclusterer/m'});
       };
       $(function() {
         $("#slider-range").slider({
           range: true,
-          min: then.getTime() / 1000,
-          max: today.getTime() / 1000,
-          values: [then.getTime() / 1000, today.getTime() / 1000],
+          min: then.getTime() / 100000000,
+          max: today.getTime() / 100000000,
+          values: [then.getTime() / 100000000, today.getTime() / 100000000],
           slide: function(event, ui) {
-              low = new Date(ui.values[0] * 1000);
-              high = new Date(ui.values[1] * 1000);
+              low = new Date(ui.values[0] * 100000000);
+              high = new Date(ui.values[1] * 100000000);
               $("#amount").val(low.toDateString() + " - " +
                                     high.toDateString());
               updateMap(low, high);
             }
           });
-          $("#amount").val((new Date($("#slider-range").slider("values", 0)*1000).toDateString()) +
-            " - " + (new Date($("#slider-range").slider("values", 1)*1000)).toDateString());
+          $("#amount").val((new Date($("#slider-range").slider("values", 0)*100000000).toDateString()) +
+            " - " + (new Date($("#slider-range").slider("values", 1)*100000000)).toDateString());
       });
     </script>
 

@@ -3,16 +3,16 @@
 <title>StreamShare! | {{streamId}}</title>
 <script src="/static/js/dropzone.js" type="text/javascript"></script>
 <script>
-    var marker = {{imageUrls|length}}
-    // var more = {{more}}
-    // var cursor = '{{cursor}}'
+    // var marker = {{imageUrls|length}}
+    var more = {{more}}
+    var cursor = '{{cursor}}'
     $(function() {
         $("#more-image").click(
             function(){
-                // if (more) {
+                if (more) {
                     $.ajax({
                         type: "GET",
-                        url: '/loadMore?streamid={{quotedStreamId}}&marker='+marker,
+                        url: '/loadMore?streamid={{quotedStreamId}}&cursor='+cursor,
                         success: function(data) {
                             data.images.forEach(
                                 function(img) {
@@ -21,15 +21,15 @@
                                         + img + ' alt=""></a></div>');
                                 }
                                 )
-                                if (data.images.length != 0) {
-                                    marker += 4;
-                                }
-                                // more = data.more;
-                                // cursor = data.cursor;
+                                // if (data.images.length != 0) {
+                                //     marker += 4;
+                                // }
+                                more = data.more;
+                                cursor = data.cursor;
                             },
                             dataType: "json"
                         })
-                // }
+                }
                 }
                 )
             })

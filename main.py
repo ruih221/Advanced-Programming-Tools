@@ -29,7 +29,8 @@ app = webapp2.WSGIApplication([
     ('/deletestream', DeleteStream),
     ('/task/updateLeaderBoard', updateLeaderboard),
     ('/task/rebuildCompletionIndex', rebuildCompletionIndex),
-    (r'/task/senddigest\d+', senddigest)
+    (r'/task/senddigest\d+', senddigest),
+    ('/task/deleteservingurl', deleteservingurl)
 ], debug=False)
 
 

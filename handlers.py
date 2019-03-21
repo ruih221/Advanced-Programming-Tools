@@ -23,6 +23,7 @@ from google.appengine.api import search
 from google.appengine.api import mail
 from google.appengine.api import images
 from google.appengine.ext import blobstore
+from google.appengine.api import taskqueue
 from google.appengine.datastore.datastore_query import Cursor
 
 
@@ -149,50 +150,58 @@ class DeleteStream(BaseHandler):
         logging.exception('this stream does not exist')
       doc_id = str(curStream.streamID())
       def _tx():
-        self.deleteImages(curStreamName)
+        self.deleteImages(curStream.key)
         StreamDoc.removeStream(doc_id)
         curStream.delete()
       # atomic operation, either all are deleted or non deleted!
       ndb.transaction(_tx)
     self.redirect('/manage')
   
-  def deleteImages(self, streamId):
-    bucket_name = os.environ.get('BUCKET_NAME',
-                              app_identity.get_default_gcs_bucket_name())
-    streamPath = '/' + bucket_name + '/' + streamId
-    cloudImages = gcs.listbucket(streamPath)
-    for img in cloudImages:
-      try:
-        blobkey = blobstore.create_gs_key('/gs{}'.format(img.filename))
-        images.delete_serving_url(blobkey)
-      except:
-        logging.error("delete failed")
-      try:
-        gcs.delete(img.filename)
-      except:
-        logging.info('tried to delete cloud storage in local')
-    # # bucket_name = os.environ.get('BUCKET_NAME',
-    # #                            app_identity.get_default_gcs_bucket_name())
-    # # streamPath = '/' + bucket_name + '/' + streamId
-    # # cloudImages = gcs.listbucket(streamPath)
-    # cloudImages = Image.query(ancestor = curStreamKey).fetch()
+  def deleteImages(self, curStreamKey):
+    # bucket_name = os.environ.get('BUCKET_NAME',
+    #                           app_identity.get_default_gcs_bucket_name())
+    # streamPath = '/' + bucket_name + '/' + streamId
+    # cloudImages = gcs.listbucket(streamPath)
     # for img in cloudImages:
-    #   blobkey = img.gcs_key
     #   try:
-    #     # blobkey = blobstore.create_gs_key('/gs{}'.format(img.filename))
+    #     blobkey = blobstore.create_gs_key('/gs{}'.format(img.filename))
     #     images.delete_serving_url(blobkey)
     #   except:
-    #     return
+    #     logging.error("delete failed")
     #   try:
-    #     # gcs.delete(img.filename)
-    #     blobstore.delete(blobkey)
+    #     gcs.delete(img.filename)
     #   except:
     #     logging.info('tried to delete cloud storage in local')
-    #   img.key.delete()
-    # # try:
-    # #   gcs.delete(streamPath)
-    # # except:
-    # #   logging.info('tried to delete cloud storage in local')
+    # bucket_name = os.environ.get('BUCKET_NAME',
+    #                            app_identity.get_default_gcs_bucket_name())
+    # streamPath = '/' + bucket_name + '/' + streamId
+    # cloudImages = gcs.listbucket(streamPath)
+    # cloudImages = Image.query(ancestor = curStreamKey).fetch()
+    # # servingUrlToDelete = []
+    # for img in cloudImages:
+    #   blobkey = img.gcs_key
+      # try:
+        # blobkey = blobstore.create_gs_key('/gs{}'.format(img.filename))
+      # servingUrlToDelete.append(blobkey)
+      # images.delete_serving_url(blobkey)
+      # except:
+        # logging.error("failed to delete serving url")
+      # try:
+        # gcs.delete(img.filename)
+      # blobstore.delete(blobkey)
+      # except:
+      #   logging.info('tried to delete cloud storage in local')
+      # img.key.delete()
+    # try:
+    #   gcs.delete(streamPath)
+    # except:
+    #   logging.info('tried to delete cloud storage in local')
+    task = taskqueue.add(
+      url='/task/deleteservingurl',
+      params = {
+        'streamkey' : curStreamKey.urlsafe()
+      }
+    )
 # [END delete_stream]
 
 # [START add_sub]
@@ -340,7 +349,7 @@ class updateStream(BaseHandler):
 class UploadImage(BaseHandler):
   @BaseHandler.check_log_in
   def post(self):
-    images = self.request.POST.getall('file')
+    uploadimages = self.request.POST.getall('file')
     streamId = self.request.get('streamid')
     unknownLoc = self.request.POST.get('unknownLoc')
     if not unknownLoc:
@@ -358,7 +367,7 @@ class UploadImage(BaseHandler):
                                app_identity.get_default_gcs_bucket_name())
     write_retry_params = gcs.RetryParams(backoff_factor=1.1)
 
-    for img in images:
+    for img in uploadimages:
       fileName = '/' + bucket_name + '/' + streamId + '/' + img.filename
       gcs_file = gcs.open(fileName, 
                           'w',
@@ -367,7 +376,7 @@ class UploadImage(BaseHandler):
       gcs_file.write(img.file.read())
       gcs_file.close()
       blob_key = blobstore.create_gs_key('/gs{}'.format(fileName))
-      serving_url = images.get_serving_url(blob_key)
+      serving_url = images.get_serving_url(blob_key, secure_url=True)
       ndb_img = Image(parent = curStream.key, serving_url = serving_url, gcs_key = blobstore.create_gs_key('/gs{}'.format(fileName)), geo =  ndb.GeoPt(lat, lon))
       ndb_img_key = ndb_img.put()
     
@@ -427,57 +436,57 @@ class geoView(BaseHandler):
 # [END geo_view]
 
 # [START get_more_images]
-def getMoreImages(streamId, pageRange = DEFAULT_PAGE_RANGE, marker = 0):
-  bucket_name = os.environ.get('BUCKET_NAME',
-                               app_identity.get_default_gcs_bucket_name())
-  streamPath = '/' +bucket_name + '/' + streamId
-  try:
-    cloudImages = gcs.listbucket(streamPath)
-  except:
-    return None
-  # access images by creation time
-  servingUrl = []
-  img_bucket = []
-  for img in cloudImages:
-    img_bucket.append(img)
-
-  img_bucket.sort(key = lambda x : (x.st_ctime), reverse = True)
-  for i in range(marker, min(marker + pageRange, len(img_bucket))):
-    servingUrl.append(images.get_serving_url(blobstore.create_gs_key('/gs{}'.format(img_bucket[i].filename)), secure_url = True))
-  return servingUrl
-  # curStream = stream.query(ancestor = streamGroup_key(), filters = stream.name == streamId).get()
-  # if not cursor:
-  #   cloudImages, next_cursor, more = Image.query(ancestor = curStream.key).order(-Image.addDate).fetch_page(pageRange)
-  # else:
-  #   cloudImages, next_cursor, more = Image.query(ancestor = curStream.key).order(-Image.addDate).fetch_page(pageRange, start_cursor = cursor)
-  
+def getMoreImages(streamId, pageRange = DEFAULT_PAGE_RANGE, cursor = None):
+  # bucket_name = os.environ.get('BUCKET_NAME',
+  #                              app_identity.get_default_gcs_bucket_name())
+  # streamPath = '/' +bucket_name + '/' + streamId
+  # try:
+  #   cloudImages = gcs.listbucket(streamPath)
+  # except:
+  #   return None
+  # # access images by creation time
   # servingUrl = []
+  # img_bucket = []
   # for img in cloudImages:
-  #   servingUrl.append(images.get_serving_url(img.gcs_key))
-  # return (servingUrl, next_cursor, more)
+  #   img_bucket.append(img)
+
+  # img_bucket.sort(key = lambda x : (x.st_ctime), reverse = True)
+  # for i in range(marker, min(marker + pageRange, len(img_bucket))):
+  #   servingUrl.append(images.get_serving_url(blobstore.create_gs_key('/gs{}'.format(img_bucket[i].filename)), secure_url = True))
+  # return servingUrl
+  curStream = stream.query(ancestor = streamGroup_key(), filters = stream.name == streamId).get()
+  if not cursor:
+    cloudImages, next_cursor, more = Image.query(ancestor = curStream.key).order(-Image.addDate).fetch_page(pageRange)
+  else:
+    cloudImages, next_cursor, more = Image.query(ancestor = curStream.key).order(-Image.addDate).fetch_page(pageRange, start_cursor = cursor)
+  
+  servingUrl = []
+  for img in cloudImages:
+    servingUrl.append(img.serving_url)
+  return (servingUrl, next_cursor, more)
 
 # [END get_more_images]
 
 # [START load_more]
 class loadMore(BaseHandler):
   def get(self):
-    # streamId = self.request.get('streamid')
-    # # marker = self.request.get('marker')
-    # cursor = Cursor(urlsafe=self.request.get('cursor'))
-    # imgList, next_cursor, more = getMoreImages(streamId = streamId, cursor = cursor)
-    # result_json = {'images' : imgList,
-    #                 'more' : more}
-    # if next_cursor:
-    #   next_cursor = next_cursor.urlsafe()
-    #   result_json.update({'cursor' : next_cursor})
-    
-    # # send response back as json 
-    # self.response.write(json.dumps(result_json))
     streamId = self.request.get('streamid')
-    marker = self.request.get('marker')
-    imgList = getMoreImages(streamId = streamId, marker = int(marker))
+    # marker = self.request.get('marker')
+    cursor = Cursor(urlsafe=self.request.get('cursor'))
+    imgList, next_cursor, more = getMoreImages(streamId = streamId, cursor = cursor)
+    result_json = {'images' : imgList,
+                    'more' : more}
+    if next_cursor:
+      next_cursor = next_cursor.urlsafe()
+      result_json.update({'cursor' : next_cursor})
+    
     # send response back as json 
-    self.response.write(json.dumps({'images' : imgList}))
+    self.response.write(json.dumps(result_json))
+    # streamId = self.request.get('streamid')
+    # marker = self.request.get('marker')
+    # imgList = getMoreImages(streamId = streamId, marker = int(marker))
+    # # send response back as json 
+    # self.response.write(json.dumps({'images' : imgList}))
 
 # [END load_more]
 
@@ -507,23 +516,23 @@ class View(BaseHandler):
     curStream.put()
     imgUrls = []
     if streamId:
-      # imgUrls, cursor, more = getMoreImages(streamId, pageRange)
-      imgUrls = getMoreImages(streamId, pageRange)
-    # if cursor:
-    #   cursor = cursor.urlsafe()
-    # # convert more to something javascript can read
-    # if more:
-    #   more = 'true'
-    # else:
-    #   more = 'false'
+      imgUrls, cursor, more = getMoreImages(streamId, pageRange)
+      # imgUrls = getMoreImages(streamId, pageRange)
+    if cursor:
+      cursor = cursor.urlsafe()
+    # convert more to something javascript can read
+    if more:
+      more = 'true'
+    else:
+      more = 'false'
     template_values = {
       'streamId' : streamId,
       'quotedStreamId' : urllib.quote(streamId),
       'imageUrls' : imgUrls,
       'isOwner' : isOwner,
-      'isSub' : isSub
-      # 'cursor' : cursor,
-      # 'more' : more
+      'isSub' : isSub,
+      'cursor' : cursor,
+      'more' : more
     }
     self.render_template('view.html', template_values)
 # [END View]

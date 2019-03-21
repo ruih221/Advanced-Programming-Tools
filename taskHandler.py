@@ -16,6 +16,8 @@ from baseHandler import BaseHandler
 from google.appengine.ext import ndb
 from google.appengine.api import users
 from google.appengine.api import mail
+from google.appengine.api import images
+from google.appengine.ext import blobstore
 # [END imports]
 
 DEFAULT_TIME_INTERVAL = 5
@@ -79,3 +81,13 @@ class rebuildCompletionIndex(BaseHandler):
 
 
 # [END rebuild_completion_index]
+
+class deleteservingurl(BaseHandler):
+    def post(self):
+        streamkey = ndb.Key(urlsafe=self.request.get("streamkey"))
+        cloudImages = Image.query(ancestor = streamkey).fetch()
+        for img in cloudImages:
+            blobkey = img.gcs_key
+            images.delete_serving_url(blobkey)
+            blobstore.delete(blobkey)
+            img.key.delete()

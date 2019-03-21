@@ -10,6 +10,24 @@ def streamGroup_key(group_name=DEFAULT_GROUP_NAME):
 def mailingUser_group(frequency=5):
     return ndb.Key('frequency', str(frequency))
 
+# meta data class used to store completion index
+class meta(ndb.Model):
+    completion_index = ndb.StringProperty(repeated = True, indexed = False)
+
+    @classmethod
+    def get_meta(cls):
+        meta_data = meta.get_by_id('meta')
+        if not meta_data:
+            meta_data = meta(id='meta')
+            meta_data.put()
+        return meta_data
+
+class Image(ndb.Model):
+    gcs_key = ndb.StringProperty(required = True, indexed = False)
+    serving_url = ndb.StringProperty(required = True, indexed = False)
+    geo = ndb.GeoPtProperty(indexed = False)
+    addDate = ndb.DateTimeProperty(auto_now_add = True, required = True)
+
 class stream(ndb.Model):
     name = ndb.StringProperty()
     tags = ndb.StringProperty(repeated = True)

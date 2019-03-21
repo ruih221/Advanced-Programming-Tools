@@ -14,3 +14,7 @@ cron:
   - description: "send digest every day"
     url: /task/senddigest24
     schedule: every 24 hours
+
+  - description: "update completion index"
+    url: /task/rebuildCompletionIndex
+    schedule: every 1 hours

@@ -11,9 +11,10 @@ import json
 import re
 import datetime
 
-from models import stream, userSub, streamGroup_key, mailingListUser, mailingUser_group
+from models import *
 from baseHandler import BaseHandler
 from docs import *
+from helper import *
 
 from google.appengine.ext import ndb
 from google.appengine.api import users
@@ -22,6 +23,9 @@ from google.appengine.api import search
 from google.appengine.api import mail
 from google.appengine.api import images
 from google.appengine.ext import blobstore
+from google.appengine.datastore.datastore_query import Cursor
+
+
 # [END imports]
 
 DEFAULT_STREAM_NAME = 'public stream'
@@ -83,7 +87,7 @@ class CreateNewStream(BaseHandler):
   def sendInvitation(self, streamName, subList, sublink, optional_message = None):
     for invitee in subList:
       message = mail.EmailMessage(
-        sender = 'subscription_manager@streamshare.appspotmail.com',
+        sender = 'subscription_manager@aptproj.appspotmail.com',
         subject = 'Invitation to Subscribe'
       )
       message.to = invitee
@@ -118,7 +122,6 @@ class CreateNewStream(BaseHandler):
     
     # send invite to subscribers
     subList = re.sub(r'[\,]+', ' ', subList).split()
-    logging.info(subList)
     subLink = self.request.host_url + '/addsub?subscribe=' + urllib.quote(NewStreamName)
     self.sendInvitation(NewStreamName, subList, subLink, optional_message)
     self.redirect('/manage')
@@ -155,7 +158,7 @@ class DeleteStream(BaseHandler):
   
   def deleteImages(self, streamId):
     bucket_name = os.environ.get('BUCKET_NAME',
-                               app_identity.get_default_gcs_bucket_name())
+                              app_identity.get_default_gcs_bucket_name())
     streamPath = '/' + bucket_name + '/' + streamId
     cloudImages = gcs.listbucket(streamPath)
     for img in cloudImages:
@@ -163,15 +166,33 @@ class DeleteStream(BaseHandler):
         blobkey = blobstore.create_gs_key('/gs{}'.format(img.filename))
         images.delete_serving_url(blobkey)
       except:
-        return
+        logging.error("delete failed")
       try:
         gcs.delete(img.filename)
       except:
         logging.info('tried to delete cloud storage in local')
-    try:
-      gcs.delete(streamPath)
-    except:
-      logging.info('tried to delete cloud storage in local')
+    # # bucket_name = os.environ.get('BUCKET_NAME',
+    # #                            app_identity.get_default_gcs_bucket_name())
+    # # streamPath = '/' + bucket_name + '/' + streamId
+    # # cloudImages = gcs.listbucket(streamPath)
+    # cloudImages = Image.query(ancestor = curStreamKey).fetch()
+    # for img in cloudImages:
+    #   blobkey = img.gcs_key
+    #   try:
+    #     # blobkey = blobstore.create_gs_key('/gs{}'.format(img.filename))
+    #     images.delete_serving_url(blobkey)
+    #   except:
+    #     return
+    #   try:
+    #     # gcs.delete(img.filename)
+    #     blobstore.delete(blobkey)
+    #   except:
+    #     logging.info('tried to delete cloud storage in local')
+    #   img.key.delete()
+    # # try:
+    # #   gcs.delete(streamPath)
+    # # except:
+    # #   logging.info('tried to delete cloud storage in local')
 # [END delete_stream]
 
 # [START add_sub]
@@ -287,19 +308,56 @@ class searchStream(BaseHandler):
     self.render_template('search.html', template_values)
 # [END searchStream]
 
+# [START get_completion_index]
+class getCompletionIndex(BaseHandler):
+  def get(self):
+    userInput = self.request.get('term')
+    logging.info(userInput)
+    completion_index = meta.get_meta().completion_index
+    autoCompleteResult = filter(lambda x: userInput in x, completion_index)
+    autoCompleteResult = sorted(autoCompleteResult)[0:20]
+    self.response.headers['content-type'] = 'application/json'
+    self.response.write(json.dumps(autoCompleteResult))
+    
+
+# [END get_completion_index]
+
+class updateStream(BaseHandler):
+  def get(self):
+    length = self.request.get('length')
+    streamName = self.request.get('streamid')
+    if not streamName:
+      return
+    streamName = urllib.unquote(streamName)
+    curStream = stream.query(ancestor = streamGroup_key(), filters = stream.name == streamName).get()
+    if not curStream:
+      return
+    curStream.imgCount = curStream.imgCount + int(length)
+    curStream.lastUploadTime = datetime.datetime.now().strftime('%m/%d/%y')
+    curStream.put()
+
 # [START upload_image]
 class UploadImage(BaseHandler):
   @BaseHandler.check_log_in
   def post(self):
     images = self.request.POST.getall('file')
     streamId = self.request.get('streamid')
+    unknownLoc = self.request.POST.get('unknownLoc')
+    if not unknownLoc:
+      lat, lon = genRandLocation()
+    elif unknownLoc:
+      lat, lon = genRandLocation()
+    else:
+      lat = self.request.POST.get('lat')
+      lon = self.request.POST.get('lon')
+
     curStream = stream.query(ancestor = streamGroup_key(), filters = stream.name == streamId).get()
     if not curStream:
       return
     bucket_name = os.environ.get('BUCKET_NAME',
                                app_identity.get_default_gcs_bucket_name())
     write_retry_params = gcs.RetryParams(backoff_factor=1.1)
-    #TODO add duplicate detection
+
     for img in images:
       fileName = '/' + bucket_name + '/' + streamId + '/' + img.filename
       gcs_file = gcs.open(fileName, 
@@ -308,32 +366,68 @@ class UploadImage(BaseHandler):
                           retry_params = write_retry_params)
       gcs_file.write(img.file.read())
       gcs_file.close()
-
-    def _tx():
-      curStream = stream.query(ancestor = streamGroup_key(), filters = stream.name == streamId).get()
-      curStream.imgCount += len(images)
-      curStream.lastUploadTime = datetime.datetime.now().strftime('%m/%d/%y')
-      curStream.put()
-    # has to be updating imagecount has to be atomic operation!
-    ndb.transaction(_tx)
-
-  # update imgage counts and last uploadtime upon successful upload
-  # @BaseHandler.check_log_in  
-  # def get(self):
-  #   imgCount = self.request.get('count')
-  #   streamId = self.request.get('streamid')
-  #   logging.info(imgCount)
-  #   curStream = stream.query(ancestor = streamGroup_key(), filters = stream.name == streamId).get()
-  #   if not curStream:
-  #     return
-  #   curStream.imgCount += int(imgCount)
-  #   curStream.lastUploadTime = datetime.datetime.now().strftime('%m/%d/%y')
-  #   curStream.put()
+      blob_key = blobstore.create_gs_key('/gs{}'.format(fileName))
+      serving_url = images.get_serving_url(blob_key)
+      ndb_img = Image(parent = curStream.key, serving_url = serving_url, gcs_key = blobstore.create_gs_key('/gs{}'.format(fileName)), geo =  ndb.GeoPt(lat, lon))
+      ndb_img_key = ndb_img.put()
     
-# [END upload_image]
+    # def _tx():
+    #   curStream = stream.query(ancestor = streamGroup_key(), filters = stream.name == streamId).get()
+    #   curStream.imgCount = curStream.imgCount + len(images)
+    #   curStream.lastUploadTime = datetime.datetime.now().strftime('%m/%d/%y')
+    #   curStream.put()
+    # # has to be updating imagecount has to be atomic operation!
+    # ndb.transaction(_tx)
+
+# [START social]
+class social(BaseHandler):
+  def get(self):
+    template_values = {
+      'request_path' : self.request.path
+    }
+    self.render_template('social.html', template_values)
+
+# [END social]
+
+# [START get_geo_data]
+class getGeoData(BaseHandler):
+  def get(self):
+    streamId = self.request.get('streamid')
+    if not streamId:
+      return
+    streamId = urllib.unquote(streamId)
+    curStream = stream.query(ancestor = streamGroup_key(), filters = stream.name == streamId).get()
+    if not curStream:
+      return
+    allImages = Image.query(ancestor = curStream.key).fetch()
+    imgLoc = []
+    imgUrl = []
+    imgTime = []
+    for img in allImages:
+      geo = str(img.geo)
+      geo = geo.split(',')
+      imgLoc.append(geo)
+      imgUrl.append(images.get_serving_url(img.gcs_key))
+      imgTime.append(img.addDate.isoformat())
+    json_result = {
+      'imgLoc' : imgLoc,
+      'imgUrl' : imgUrl,
+      'imgTime' : imgTime
+    }
+    self.response.write(json.dumps(json_result))
+# [END get_geo_data]
+
+# [START geo_view]
+class geoView(BaseHandler):
+  def get(self):
+    streamid = self.request.get('streamid')
+    self.render_template('geoview.html', {
+      'streamid' : streamid
+    })
+# [END geo_view]
 
 # [START get_more_images]
-def getMoreImages(streamId, pageRange = DEFAULT_PAGE_RANGE, marker=0):
+def getMoreImages(streamId, pageRange = DEFAULT_PAGE_RANGE, marker = 0):
   bucket_name = os.environ.get('BUCKET_NAME',
                                app_identity.get_default_gcs_bucket_name())
   streamPath = '/' +bucket_name + '/' + streamId
@@ -349,14 +443,36 @@ def getMoreImages(streamId, pageRange = DEFAULT_PAGE_RANGE, marker=0):
 
   img_bucket.sort(key = lambda x : (x.st_ctime), reverse = True)
   for i in range(marker, min(marker + pageRange, len(img_bucket))):
-    servingUrl.append(images.get_serving_url(blobstore.create_gs_key('/gs{}'.format(img_bucket[i].filename))))
-
+    servingUrl.append(images.get_serving_url(blobstore.create_gs_key('/gs{}'.format(img_bucket[i].filename)), secure_url = True))
   return servingUrl
+  # curStream = stream.query(ancestor = streamGroup_key(), filters = stream.name == streamId).get()
+  # if not cursor:
+  #   cloudImages, next_cursor, more = Image.query(ancestor = curStream.key).order(-Image.addDate).fetch_page(pageRange)
+  # else:
+  #   cloudImages, next_cursor, more = Image.query(ancestor = curStream.key).order(-Image.addDate).fetch_page(pageRange, start_cursor = cursor)
+  
+  # servingUrl = []
+  # for img in cloudImages:
+  #   servingUrl.append(images.get_serving_url(img.gcs_key))
+  # return (servingUrl, next_cursor, more)
+
 # [END get_more_images]
 
 # [START load_more]
 class loadMore(BaseHandler):
   def get(self):
+    # streamId = self.request.get('streamid')
+    # # marker = self.request.get('marker')
+    # cursor = Cursor(urlsafe=self.request.get('cursor'))
+    # imgList, next_cursor, more = getMoreImages(streamId = streamId, cursor = cursor)
+    # result_json = {'images' : imgList,
+    #                 'more' : more}
+    # if next_cursor:
+    #   next_cursor = next_cursor.urlsafe()
+    #   result_json.update({'cursor' : next_cursor})
+    
+    # # send response back as json 
+    # self.response.write(json.dumps(result_json))
     streamId = self.request.get('streamid')
     marker = self.request.get('marker')
     imgList = getMoreImages(streamId = streamId, marker = int(marker))
@@ -391,13 +507,23 @@ class View(BaseHandler):
     curStream.put()
     imgUrls = []
     if streamId:
+      # imgUrls, cursor, more = getMoreImages(streamId, pageRange)
       imgUrls = getMoreImages(streamId, pageRange)
+    # if cursor:
+    #   cursor = cursor.urlsafe()
+    # # convert more to something javascript can read
+    # if more:
+    #   more = 'true'
+    # else:
+    #   more = 'false'
     template_values = {
       'streamId' : streamId,
       'quotedStreamId' : urllib.quote(streamId),
       'imageUrls' : imgUrls,
       'isOwner' : isOwner,
       'isSub' : isSub
+      # 'cursor' : cursor,
+      # 'more' : more
     }
     self.render_template('view.html', template_values)
 # [END View]

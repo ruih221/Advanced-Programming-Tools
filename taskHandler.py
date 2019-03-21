@@ -10,7 +10,7 @@ import datetime
 import urllib
 import re
 
-from models import stream, userSub, mailingListUser, streamGroup_key, mailingUser_group
+from models import *
 from baseHandler import BaseHandler
 
 from google.appengine.ext import ndb
@@ -65,6 +65,17 @@ class senddigest(BaseHandler):
             message.send()
 # [END send_digest]
 
+# [START rebuild_completion_index]
+class rebuildCompletionIndex(BaseHandler):
+    def get(self):
+        allStreams = stream.query(ancestor = streamGroup_key()).fetch()
+        meta_data = meta.get_meta()
+        completion_index = set()
+        for curStream in allStreams:
+            completion_index.update(curStream.tags)
+            completion_index.add(curStream.name)
+        meta_data.completion_index = list(completion_index)
+        meta_data.put()
 
-        
 
+# [END rebuild_completion_index]

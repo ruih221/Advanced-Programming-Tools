@@ -4,31 +4,58 @@
 <script src="/static/js/dropzone.js" type="text/javascript"></script>
 <script>
     var marker = {{imageUrls|length}}
+    // var more = {{more}}
+    // var cursor = '{{cursor}}'
     $(function() {
         $("#more-image").click(
             function(){
-                $.ajax({
-                    type: "GET",
-                    url: '/loadMore?streamid={{quotedStreamId}}&marker='+marker,
-                    success: function(data) {
-                        data.images.forEach(
-                            function(img) {
-                                $("#img-pane").append('<div class="col-lg-3 col-md-4 col-6"><a href=' + img
-                                    + ' class="d-block mb-4 h-100"><img class="img-fluid img-thumbnail" src='
-                                    + img + ' alt=""></a></div>');
-                            }
-                            )
-                            if (data.images.length != 0) {
-                                marker += 4;
-                            }
-                        },
-                        dataType: "json"
-                    })
+                // if (more) {
+                    $.ajax({
+                        type: "GET",
+                        url: '/loadMore?streamid={{quotedStreamId}}&marker='+marker,
+                        success: function(data) {
+                            data.images.forEach(
+                                function(img) {
+                                    $("#img-pane").append('<div class="col-lg-3 col-md-4 col-6"><a href=' + img
+                                        + ' class="d-block mb-4 h-100"><img class="img-fluid img-thumbnail" src='
+                                        + img + ' alt=""></a></div>');
+                                }
+                                )
+                                if (data.images.length != 0) {
+                                    marker += 4;
+                                }
+                                // more = data.more;
+                                // cursor = data.cursor;
+                            },
+                            dataType: "json"
+                        })
+                // }
                 }
                 )
             })
-            
+    
+    $(function() {
+        $("#geo").click(
+            function(){
+               window.location.href="/geoview?streamid={{quotedStreamId}}"
+            }
+        )
+    })    
     {% if isOwner %}
+        var lat = 0;
+        var lon = 0;
+        var unknownLoc = true;
+        function getLocation() {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(function(position) {
+                lat = position.coords.latitude;
+                lon = position.coords.longitude;
+                unknownLoc = false;
+            });
+        }
+        }
+        getLocation()
+
         Dropzone.options.mydrop = {
             autoProcessQueue: false,
             paramName: "file",
@@ -36,28 +63,33 @@
             dictRemoveFile: "x",
             maxFilesize: 4,
             parallelUploads: 10,
+            // maxFiles: 10,
             acceptedFiles: "image/*",
 
             init: function() {
                 var submitButton = document.querySelector("#submit-image");
                 myDropzone = this;
-
+                
+                myDropzone.on("sending", function(file, xhr, formData) {
+                    formData.append("lat", lat);
+                    formData.append("lon", lon);
+                    formData.append("unknownLoc", unknownLoc);
+                })
                 submitButton.addEventListener("click", function() {
                     myDropzone.processQueue(); // Tell Dropzone to process all queued files.
                 });
-                
+                myDropzone.on("processing", function() {
+                    myDropzone.options.autoProcessQueue = true;
+                })
                 myDropzone.on("complete", function() {
                     if (myDropzone.getUploadingFiles().length == 0 &&
                         myDropzone.getQueuedFiles().length == 0) {
                             var imgcount=myDropzone.getAcceptedFiles().length
+                            $.ajax({
+                            type: "GET",
+                            url: '/updateStream?streamid={{quotedStreamId}}&length='+imgcount.toString(),
+                            });
                             setTimeout(function () {
-                                // $.ajax({
-                                // type: "GET",
-                                // url: '/uploadImage?count='+imgcount+'&streamid={{quotedStreamId}}',
-                                // success: function(data) {
-                                //     window.location.reload()
-                                // },
-                                // })
                                 window.location.reload();
                             }, 100);
                         }
@@ -111,6 +143,9 @@
 {% endblock %}
 
 {% block content %}
+<div id="fb-root"></div>
+<script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v3.2&appId=388925201690287&autoLogAppEvents=1"></script>
+
 <div class = 'mx-5'>
     <h1>{{streamId}}</h1>
     <div id = "img-pane" class = "row text-center text-lg-left">
@@ -122,9 +157,11 @@
         </div>
     {% endfor %}
     </div>
-
-    <button type="button" class="btn btn-primary my-3" id="more-image">More</button>
     
+    <button type="button" class="btn btn-primary my-3" id="more-image">More</button>
+    <button type="button" class="btn btn-primary my-3" id="geo">GeoView</button>
+    <div class="fb-share-button" style="top: 5px;" data-href="https://aptproj.appspot.com/view?streamid={{quotedStreamId}}" data-layout="button_count" data-size="large"><a target="_blank" href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fdevelopers.facebook.com%2Fdocs%2Fplugins%2F&amp;src=sdkpreparse" class="fb-xfbml-parse-ignore">Share</a></div>
+
     {% if isOwner %}
     <form action="/uploadImage?streamid={{quotedStreamId}}"
             class="dropzone"
@@ -141,4 +178,7 @@
     </form>
     {% endif %}
 </div>
+
+
+<form id="test"></form>
 {% endblock %}

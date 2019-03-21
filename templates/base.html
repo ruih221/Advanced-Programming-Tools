@@ -4,13 +4,73 @@
     <head>
         <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
         <script src="/static/Bootstrap/js/bootstrap.bundle.min.js"></script>
-        <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js" integrity="sha256-VazP97ZCwtekAsvgPBSUwPFKdrwD3unUfSGVYrahUqU=" crossorigin="anonymous"></script>
+        <script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js"></script>
+        <!-- <script src="/static/jquery-ui-1.12.1/jquery-ui.js"></script> -->
+        <!-- <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js" integrity="sha256-VazP97ZCwtekAsvgPBSUwPFKdrwD3unUfSGVYrahUqU=" crossorigin="anonymous"></script> -->
+        <script>
+        $(function() {
+            var cache = {};
+            $( "#autocomplete_search" ).autocomplete({
+              minLength: 1,
+              source: function( request, response ) {
+                var term = request.term;
+                if ( term in cache ) {
+                  response(cache[term]);
+                  return;
+                }
+        
+                $.getJSON( "/getCompletionIndex", request, function( data, status, xhr ) {
+                  cache[term] = data;
+                  response(data);
+                });
+              }
+            });
+          } );
+        </script>
+        </script>
         {% block head %} {% endblock %}
+        <!-- <link type="text/css" rel="stylesheet" href="/static/jquery-ui-1.12.1/jquery-ui.css"> -->
         <link type="text/css" rel="stylesheet" href="/static/Bootstrap/css/bootstrap.min.css">
+        <link rel="stylesheet" href="https://ajax.googleapis.com/ajax/libs/jqueryui/1.12.1/themes/smoothness/jquery-ui.css">
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
         <meta charset="utf-8">
         <!-- STYLE START -->
         <style type="text/css">
+          .ui-autocomplete {
+              position: absolute;
+              z-index: 1040;
+              cursor: default;
+              padding: 0;
+              margin-top: 2px;
+              list-style: none;
+              background-color: #ffffff;
+              border: 1px solid #ccc;
+              -webkit-border-radius: 5px;
+                -moz-border-radius: 5px;
+                      border-radius: 5px;
+              -webkit-box-shadow: 0 5px 10px rgba(0, 0, 0, 0.2);
+                -moz-box-shadow: 0 5px 10px rgba(0, 0, 0, 0.2);
+                      box-shadow: 0 5px 10px rgba(0, 0, 0, 0.2);
+          }
+          .ui-autocomplete > li {
+            padding: 3px 20px;
+            z-index: 9999;
+          }
+          .ui-autocomplete > li.ui-state-active {
+            z-index: 9999;
+            background-color: #DDD;
+          }
+          .ui-helper-hidden-accessible {
+            z-index: 9999;
+            border: 0;
+            clip: rect(0 0 0 0);
+            height: 1px;
+            margin: -1px;
+            overflow: hidden;
+            padding: 0;
+            position: absolute;
+            width: 1px;
+          }
           body { padding-top: 70px; }
           
           @media (max-width: 991px) {
@@ -24,6 +84,7 @@
           }
           }
         </style>
+        {% block additional_style %} {% endblock %}
         <!-- style END -->
     </head>
     <header>
@@ -43,7 +104,7 @@
                   <a class="nav-link {% if '/trending' in request_path %} active {% endif %}" href="/trending">Trending</a>
               </li>
               <li class="nav-item">
-                  <a class="nav-link" href="#">Social</a>
+                  <a class="nav-link {% if '/social' in request_path %} active {% endif %}" href="/social">Social</a>
               </li>
             </ul>
             <!-- implicit submission -->
@@ -57,6 +118,7 @@
       <div class = "container-fluid" id = "main_content">
           {% block content %} {% endblock %}
       </div>
+      {% block map %} {% endblock %}
     </body>
 </html>
 {% endautoescape %}

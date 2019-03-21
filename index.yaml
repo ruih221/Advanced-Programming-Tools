@@ -4,3 +4,9 @@ indexes:
   properties:
   - name: accessFrequency
     direction: desc
+
+- kind: Image
+  ancestor: yes
+  properties:
+  - name: addDate
+    direction: desc

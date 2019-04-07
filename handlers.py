@@ -10,6 +10,7 @@ from urlparse import urlparse
 import json
 import re
 import datetime
+import coverage
 
 from models import *
 from baseHandler import BaseHandler
@@ -42,12 +43,15 @@ def get_stream_key(stream_name=DEFAULT_STREAM_NAME):
 class Management(BaseHandler):
   @BaseHandler.check_log_in
   def get(self):
+    logging.info("management entry point reached")
     user = users.get_current_user()
     allStreams = stream.query(ancestor = streamGroup_key()).fetch()
     subscribedStream = []
     quotedSubName = []
     for curStream in allStreams:
+      logging.info("management for loop reached")
       if userSub.query(ancestor = curStream.key, filters = userSub.Id == user.email()).get():
+        logging.info("management branch reached")
         subscribedStream.append(curStream)
         quotedSubName.append(urllib.quote(curStream.name))
     ownedStream = stream.query(ancestor = streamGroup_key(), filters = stream.owner == user.email())
@@ -65,18 +69,21 @@ class Management(BaseHandler):
 class addToMailingList(BaseHandler):
   @BaseHandler.check_log_in
   def post(self):
+    logging.info("addToMailingList reached")
     frequency = int(self.request.POST.get('frequency', 0))
-    logging.info(frequency)
     user = mailingListUser.query(mailingListUser.Id == users.get_current_user().email()).get()
     if not user and frequency != 0:
+      logging.info("addToMailingList branch reached")
       new_mail_user = mailingListUser(parent = mailingUser_group(frequency), Id = users.get_current_user().email(), frequency = frequency)
       new_mail_user.put()
       self.redirect('/trending')
       return
 
     if user and frequency == 0:
+      logging.info("addToMailingList branch2 reached")
       user.key.delete()
     elif user and user.frequency != frequency:
+      logging.info("addToMailingList branch3 reached")
       user.key.delete()
       new_mail_user = mailingListUser(parent = mailingUser_group(frequency), Id = users.get_current_user().email(), frequency = frequency)
       new_mail_user.put()
@@ -87,21 +94,25 @@ class addToMailingList(BaseHandler):
 class CreateNewStream(BaseHandler):
   def sendInvitation(self, streamName, subList, sublink, optional_message = None):
     for invitee in subList:
+      logging.info("send Invitation test reached")
       message = mail.EmailMessage(
         sender = 'subscription_manager@aptproj.appspotmail.com',
         subject = 'Invitation to Subscribe'
       )
       message.to = invitee
       message.body = '''You are invited to subscribe to the following stream on StreamShare!
-      ''' + streamName + '''link to subscribe: ''' + sublink + '\nLog in to Subscribe!\noptional message:\n' + optional_message
+      ''' + streamName + '''\nlink to subscribe: ''' + sublink + '\nLog in to Subscribe!\noptional message:\n' + optional_message
       message.send()
+      logging.info("invitation successfully sent")   
 
   def post(self):
+    logging.info("create new stream test reached")
     user = users.get_current_user()
     NewStreamName = self.request.get('stream-name')
     subList = self.request.get('Subscribers')
     optional_message = self.request.get('optional-message')
     if stream.query(stream.name == NewStreamName).get() != None:
+      logging.info("duplication test reached")
       self.redirect('/erroradd')
       return
     
@@ -113,9 +124,11 @@ class CreateNewStream(BaseHandler):
     owner = user.email()
     cover = self.request.get('cover')
     if not cover:
+      logging.info("non default cover test reached")
       cover = DEFAULT_KITTEN
     newStream = stream(parent = streamGroup_key(), name = NewStreamName, tags = tag, owner = owner, cover = cover)
     def _tx():
+      logging.info("new stream transaction reached")
       newStream.put()
       StreamDoc.createStream(str(newStream.streamID()), NewStreamName, tag)
     # atomic operation, either all added or none added!
@@ -126,11 +139,13 @@ class CreateNewStream(BaseHandler):
     subLink = self.request.host_url + '/addsub?subscribe=' + urllib.quote(NewStreamName)
     self.sendInvitation(NewStreamName, subList, subLink, optional_message)
     self.redirect('/manage')
+    logging.info("create new stream success")
 # [END create_new_stream]
 
 # [START error_add]
 class errorAdd(BaseHandler):
   def get(self):
+    logging.info("error page reached")
     self.render_template('error.html', {})
 
 # [END error_add]
@@ -138,10 +153,13 @@ class errorAdd(BaseHandler):
 # [START delete_stream]
 class DeleteStream(BaseHandler):
   def post(self):
+    logging.info("DeleteStream reached")
     user = users.get_current_user()
     streamList = self.request.POST.getall('steramToDelete')
     for curStreamName in streamList:
+      logging.info("DeleteStream for loop reached")
       if not curStreamName:
+        logging.info("DeleteStream branch reached")
         continue
       curStreamName = urllib.unquote(curStreamName)
       try:
@@ -150,6 +168,7 @@ class DeleteStream(BaseHandler):
         logging.exception('this stream does not exist')
       doc_id = str(curStream.streamID())
       def _tx():
+        logging.info("DeleteStream transaction reached")
         self.deleteImages(curStream.key)
         StreamDoc.removeStream(doc_id)
         curStream.delete()
@@ -158,44 +177,6 @@ class DeleteStream(BaseHandler):
     self.redirect('/manage')
   
   def deleteImages(self, curStreamKey):
-    # bucket_name = os.environ.get('BUCKET_NAME',
-    #                           app_identity.get_default_gcs_bucket_name())
-    # streamPath = '/' + bucket_name + '/' + streamId
-    # cloudImages = gcs.listbucket(streamPath)
-    # for img in cloudImages:
-    #   try:
-    #     blobkey = blobstore.create_gs_key('/gs{}'.format(img.filename))
-    #     images.delete_serving_url(blobkey)
-    #   except:
-    #     logging.error("delete failed")
-    #   try:
-    #     gcs.delete(img.filename)
-    #   except:
-    #     logging.info('tried to delete cloud storage in local')
-    # bucket_name = os.environ.get('BUCKET_NAME',
-    #                            app_identity.get_default_gcs_bucket_name())
-    # streamPath = '/' + bucket_name + '/' + streamId
-    # cloudImages = gcs.listbucket(streamPath)
-    # cloudImages = Image.query(ancestor = curStreamKey).fetch()
-    # # servingUrlToDelete = []
-    # for img in cloudImages:
-    #   blobkey = img.gcs_key
-      # try:
-        # blobkey = blobstore.create_gs_key('/gs{}'.format(img.filename))
-      # servingUrlToDelete.append(blobkey)
-      # images.delete_serving_url(blobkey)
-      # except:
-        # logging.error("failed to delete serving url")
-      # try:
-        # gcs.delete(img.filename)
-      # blobstore.delete(blobkey)
-      # except:
-      #   logging.info('tried to delete cloud storage in local')
-      # img.key.delete()
-    # try:
-    #   gcs.delete(streamPath)
-    # except:
-    #   logging.info('tried to delete cloud storage in local')
     task = taskqueue.add(
       url='/task/deleteservingurl',
       params = {
@@ -208,15 +189,18 @@ class DeleteStream(BaseHandler):
 class AddSub(BaseHandler):
   @BaseHandler.check_log_in
   def get(self):
+    logging.info("addsub reached")
     user = users.get_current_user()
     targetStream = urllib.unquote(self.request.get('subscribe'))
     curStream = stream.query(ancestor = streamGroup_key(), filters = stream.name == targetStream).get()
     if not curStream:
+      logging.info("addsub branch reached")
       return
     
     # create a new subscribed user only not subscribed yet
     result = userSub.query(ancestor = curStream.key, filters = userSub.Id == user.email()).get()
     if not result:
+      logging.info("addsub branch2 reached")
       newSubUser = userSub(parent=curStream.key, Id = user.email(), subscribedStream = curStream.key)
       newSubUser.put()
     self.redirect('/view?' + urllib.urlencode({"streamid" : targetStream}))
@@ -224,18 +208,22 @@ class AddSub(BaseHandler):
 
   @BaseHandler.check_log_in
   def post(self):
+    logging.info("addsub post reached")
     user = users.get_current_user()
     if not user:
+      logging.info("addsub post branch reached")
       self.redirect(users.create_login_url('/manage'))
       return
     targetStream = urllib.unquote(self.request.get('subscribe'))
     curStream = stream.query(ancestor = streamGroup_key(), filters = stream.name == targetStream).get()
     if not curStream:
+      logging.info("addsub post branch2 reached")
       return
     
     # create a new subscribed user only not subscribed yet
     result = userSub.query(ancestor = curStream.key, filters = userSub.Id == user.email()).get()
     if not result:
+      logging.info("addsub post branch3 reached")
       newSubUser = userSub(parent=curStream.key, Id = user.email(), subscribedStream = curStream.key)
       newSubUser.put()
 
@@ -246,6 +234,7 @@ class AddSub(BaseHandler):
 # [START remove_sub]
 class RemoveSub(BaseHandler):
   def post(self):
+    logging.info("remove sub reached")
     user = users.get_current_user()
     targetStream = self.request.POST.getall('unsubscribe')
     isSingle = self.request.get('single')
@@ -258,8 +247,10 @@ class RemoveSub(BaseHandler):
       if result:
         result.key.delete()
     if not isSingle:
+      logging.info("removesub branch1 reached")
       self.redirect('/manage')
     else:
+      logging.info("removesub branch2 reached")
       self.redirect('/view?' + urllib.urlencode({"streamid" : urllib.unquote(targetStream[0])}))
 # [END remove_sub]
 
@@ -276,9 +267,11 @@ class newStream(BaseHandler):
 class searchStream(BaseHandler):
   @BaseHandler.check_log_in 
   def get(self):
+    logging.info("searchstream entry reached")
     query = self.request.get('query')
     result_len = 0
     if query:
+      logging.info("searchstream branch reached")
       try:
         # sort by relevance, display top 10 results
         sortopt = search.SortOptions(match_scorer=search.MatchScorer())
@@ -292,13 +285,14 @@ class searchStream(BaseHandler):
         search_results = StreamDoc.getIndex().search(search_query)
         result_len = search_results.number_found
       except search.Error:
-        logging.info('search error')
+        logging.exception('search error')
         return
     
     result = []
     redirect_url = []
         
     if result_len:
+      logging.info("searchstream branch2 reached")
       for doc in search_results:
         # create document manager to access helper method 
         curDoc = StreamDoc(doc)
@@ -307,6 +301,7 @@ class searchStream(BaseHandler):
         if targetStream:
           result.append(targetStream)
       redirect_url = ['/view?' + urllib.urlencode({'streamid': x.name}) for x in result]
+
     template_values = {
       'number_found' : len(result),
       'search_result' : result,
@@ -320,8 +315,9 @@ class searchStream(BaseHandler):
 # [START get_completion_index]
 class getCompletionIndex(BaseHandler):
   def get(self):
+    logging.info("getcompletionindex reached")
     userInput = self.request.get('term')
-    logging.info(userInput)
+    # logging.info(userInput)
     completion_index = meta.get_meta().completion_index
     autoCompleteResult = filter(lambda x: userInput in x, completion_index)
     autoCompleteResult = sorted(autoCompleteResult)[0:20]
@@ -333,6 +329,7 @@ class getCompletionIndex(BaseHandler):
 
 class updateStream(BaseHandler):
   def get(self):
+    logging.info("updatestream reached")
     length = self.request.get('length')
     streamName = self.request.get('streamid')
     if not streamName:
@@ -349,6 +346,7 @@ class updateStream(BaseHandler):
 class UploadImage(BaseHandler):
   @BaseHandler.check_log_in
   def post(self):
+    logging.info("uploadimage reached")
     uploadimages = self.request.POST.getall('file')
     streamId = self.request.get('streamid')
     unknownLoc = self.request.POST.get('unknownLoc')
@@ -368,6 +366,7 @@ class UploadImage(BaseHandler):
     write_retry_params = gcs.RetryParams(backoff_factor=1.1)
 
     for img in uploadimages:
+      logging.info("uploadimage for loop reached")
       fileName = '/' + bucket_name + '/' + streamId + '/' + img.filename
       gcs_file = gcs.open(fileName, 
                           'w',
@@ -379,14 +378,7 @@ class UploadImage(BaseHandler):
       serving_url = images.get_serving_url(blob_key, secure_url=True)
       ndb_img = Image(parent = curStream.key, serving_url = serving_url, gcs_key = blobstore.create_gs_key('/gs{}'.format(fileName)), geo =  ndb.GeoPt(lat, lon))
       ndb_img_key = ndb_img.put()
-    
-    # def _tx():
-    #   curStream = stream.query(ancestor = streamGroup_key(), filters = stream.name == streamId).get()
-    #   curStream.imgCount = curStream.imgCount + len(images)
-    #   curStream.lastUploadTime = datetime.datetime.now().strftime('%m/%d/%y')
-    #   curStream.put()
-    # # has to be updating imagecount has to be atomic operation!
-    # ndb.transaction(_tx)
+      logging.info("image successfully uploaded")
 
 # [START social]
 class social(BaseHandler):
@@ -401,6 +393,7 @@ class social(BaseHandler):
 # [START get_geo_data]
 class getGeoData(BaseHandler):
   def get(self):
+    logging.info("getgeodata reached")
     streamId = self.request.get('streamid')
     if not streamId:
       return
@@ -423,6 +416,7 @@ class getGeoData(BaseHandler):
       'imgUrl' : imgUrl,
       'imgTime' : imgTime
     }
+    logging.info("getgeodata end reached")
     self.response.write(json.dumps(json_result))
 # [END get_geo_data]
 
@@ -437,27 +431,12 @@ class geoView(BaseHandler):
 
 # [START get_more_images]
 def getMoreImages(streamId, pageRange = DEFAULT_PAGE_RANGE, cursor = None):
-  # bucket_name = os.environ.get('BUCKET_NAME',
-  #                              app_identity.get_default_gcs_bucket_name())
-  # streamPath = '/' +bucket_name + '/' + streamId
-  # try:
-  #   cloudImages = gcs.listbucket(streamPath)
-  # except:
-  #   return None
-  # # access images by creation time
-  # servingUrl = []
-  # img_bucket = []
-  # for img in cloudImages:
-  #   img_bucket.append(img)
-
-  # img_bucket.sort(key = lambda x : (x.st_ctime), reverse = True)
-  # for i in range(marker, min(marker + pageRange, len(img_bucket))):
-  #   servingUrl.append(images.get_serving_url(blobstore.create_gs_key('/gs{}'.format(img_bucket[i].filename)), secure_url = True))
-  # return servingUrl
   curStream = stream.query(ancestor = streamGroup_key(), filters = stream.name == streamId).get()
   if not cursor:
+    logging.info("getmoreimage branch1 reached")
     cloudImages, next_cursor, more = Image.query(ancestor = curStream.key).order(-Image.addDate).fetch_page(pageRange)
   else:
+    logging.info("getmoreimage branch2 reached")
     cloudImages, next_cursor, more = Image.query(ancestor = curStream.key).order(-Image.addDate).fetch_page(pageRange, start_cursor = cursor)
   
   servingUrl = []
@@ -471,43 +450,42 @@ def getMoreImages(streamId, pageRange = DEFAULT_PAGE_RANGE, cursor = None):
 class loadMore(BaseHandler):
   def get(self):
     streamId = self.request.get('streamid')
-    # marker = self.request.get('marker')
     cursor = Cursor(urlsafe=self.request.get('cursor'))
     imgList, next_cursor, more = getMoreImages(streamId = streamId, cursor = cursor)
     result_json = {'images' : imgList,
                     'more' : more}
     if next_cursor:
+      logging.info("loadmore branch reached")
       next_cursor = next_cursor.urlsafe()
       result_json.update({'cursor' : next_cursor})
     
     # send response back as json 
     self.response.write(json.dumps(result_json))
-    # streamId = self.request.get('streamid')
-    # marker = self.request.get('marker')
-    # imgList = getMoreImages(streamId = streamId, marker = int(marker))
-    # # send response back as json 
-    # self.response.write(json.dumps({'images' : imgList}))
-
 # [END load_more]
 
 # [START View]
 class View(BaseHandler):
   def get(self):
+    logging.info("view entry reached")
     streamId = self.request.get("streamid")
     pageRange = self.request.get("pagerange", DEFAULT_PAGE_RANGE)
     curStream = stream.query(ancestor = streamGroup_key(), filters = stream.name == streamId).get()
     if not curStream:
+      logging.info("view branch reached")
       # redirect if stream doesn't exist
       self.redirect('/')
       return
     # check if user if the owner or subscriber
     user = users.get_current_user()
     if user:
+      logging.info("view branch2 reached")
       isOwner = user.email() == curStream.owner
       isSub = False
       if userSub.query(ancestor = curStream.key, filters = userSub.Id == user.email()).get():
+        logging.info("view branch3 reached")
         isSub = True
     else:
+      logging.info("view branch4 reached")
       isOwner = False
       isSub = False
     # increment access frequency and update accessQueue
@@ -517,13 +495,14 @@ class View(BaseHandler):
     imgUrls = []
     if streamId:
       imgUrls, cursor, more = getMoreImages(streamId, pageRange)
-      # imgUrls = getMoreImages(streamId, pageRange)
     if cursor:
       cursor = cursor.urlsafe()
     # convert more to something javascript can read
     if more:
+      logging.info("view branch5 reached")
       more = 'true'
     else:
+      logging.info("view branch6 reached")
       more = 'false'
     template_values = {
       'streamId' : streamId,
@@ -540,6 +519,7 @@ class View(BaseHandler):
 # [START view_all]
 class viewall(BaseHandler):
   def get(self):
+    logging.info("viewall reached")
     allStreams = stream.query(ancestor = streamGroup_key()).fetch()
     quotedStreamName = [urllib.quote(x.name) for x in allStreams]
     template_values = {
@@ -550,9 +530,19 @@ class viewall(BaseHandler):
     self.render_template('viewall.html', template_values)
 # [END view_all]
 
+class androidViewAll(BaseHandler):
+  def get(self):
+    allStreams = stream.query(ancestor = streamGroup_key()).fetch()
+    self.response.headers['content-type'] = 'application/json'
+    jsonResult = [{'name' : s.name,
+                   'streamUrl' : self.request.host + '/view?' + urllib.quote(s.name),
+                   'coverImageUrl' : s.cover} for s in allStreams]
+    self.response.write(json.dumps(jsonResult))
+
 # [START trending]
 class Trending(BaseHandler):
   def get(self):
+    logging.info("trending reached")
     trendingStream = stream.query(ancestor = streamGroup_key()).order(-stream.accessFrequency).fetch(3)
     redirect_url = ['/view?' + urllib.urlencode({'streamid': x.name}) for x in trendingStream]
 
@@ -567,17 +557,14 @@ class Trending(BaseHandler):
 # [START main_page]
 class MainPage(BaseHandler):
   def get(self):
+    logging.info("mainpage reached")
     user = users.get_current_user()
     if user:
+      logging.info("mainpage branch reached")
       self.redirect('manage')
-      # subscribedStream = userSub.query(userSub.Id == user.email()).get()
-
-      # # create user subscription if not already created 
-      # if subscribedStream == None:
-      #   sub = userSub(Id = user.email(), subscribedStream = [])
-      #   sub.put()
       return
     else:
+      logging.info("mainpage branch2 reached")
       url = users.create_login_url(self.request.uri)
       url_linktext = 'Login with Google'
       

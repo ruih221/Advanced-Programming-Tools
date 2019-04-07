@@ -30,7 +30,7 @@ class updateLeaderboard(BaseHandler):
         cutoffDT = datetime.datetime.now() - datetime.timedelta(hours=1)
         for curStream in allStreams:
             accessQueue = curStream.accessQueue
-            logging.info(accessQueue)
+            # logging.info(accessQueue)
             while (len(accessQueue) != 0 and accessQueue[0] < cutoffDT):
                 accessQueue.pop(0)
             curStream.accessFrequency = len(accessQueue)
@@ -53,7 +53,7 @@ class senddigest(BaseHandler):
         trendingStream = stream.query(ancestor = streamGroup_key()).order(-stream.accessFrequency).fetch(3)
         for mailuser in mailUsers:
             message = mail.EmailMessage(
-                sender = 'digest@streamshare.appspotmail.com',
+                sender = 'digest@aptproj.appspotmail.com',
                 subject = 'Viewing Digest'
                 )
             message.to = mailuser.Id
@@ -63,7 +63,7 @@ class senddigest(BaseHandler):
             """.format(freqText)
             for trending in trendingStream:
                 message.body += trending.name + ' link:' + self.request.host_url + 'view?streamid=' + urllib.quote(trending.name) \
-                    + 'views: ' + str(trending.accessFrequency)
+                    + 'views: ' + str(trending.accessFrequency) + '\n'
             message.send()
 # [END send_digest]
 
@@ -84,9 +84,11 @@ class rebuildCompletionIndex(BaseHandler):
 
 class deleteservingurl(BaseHandler):
     def post(self):
+        logging.info("deleteservingurl task reached")
         streamkey = ndb.Key(urlsafe=self.request.get("streamkey"))
         cloudImages = Image.query(ancestor = streamkey).fetch()
         for img in cloudImages:
+            logging.info("deleteservingurl for loop reached")
             blobkey = img.gcs_key
             images.delete_serving_url(blobkey)
             blobstore.delete(blobkey)

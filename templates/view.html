@@ -6,6 +6,10 @@
     // var marker = {{imageUrls|length}}
     var more = {{more}}
     var cursor = '{{cursor}}'
+    
+    function returnMore() { return more; }
+    function returnCursor() { return cursor; }
+
     $(function() {
         $("#more-image").click(
             function(){

@@ -34,6 +34,7 @@ class BaseHandler(webapp2.RequestHandler):
         handler(self, *args, **kwargs)
       else:
         self.redirect(users.create_login_url('/manage'))
+        logging.info("not logged in redirection reached")
         return
     return check_user
 

@@ -344,7 +344,6 @@ class updateStream(BaseHandler):
 
 # [START upload_image]
 class UploadImage(BaseHandler):
-  @BaseHandler.check_log_in
   def post(self):
     logging.info("uploadimage reached")
     uploadimages = self.request.POST.getall('file')
@@ -352,11 +351,12 @@ class UploadImage(BaseHandler):
     unknownLoc = self.request.POST.get('unknownLoc')
     if not unknownLoc:
       lat, lon = genRandLocation()
-    elif unknownLoc:
+    elif unknownLoc == 'True':
       lat, lon = genRandLocation()
     else:
       lat = self.request.POST.get('lat')
       lon = self.request.POST.get('lon')
+    geoPoint = search.GeoPoint(float(lat), float(lon))
 
     curStream = stream.query(ancestor = streamGroup_key(), filters = stream.name == streamId).get()
     if not curStream:
@@ -378,6 +378,7 @@ class UploadImage(BaseHandler):
       serving_url = images.get_serving_url(blob_key, secure_url=True)
       ndb_img = Image(parent = curStream.key, serving_url = serving_url, gcs_key = blobstore.create_gs_key('/gs{}'.format(fileName)), geo =  ndb.GeoPt(lat, lon))
       ndb_img_key = ndb_img.put()
+      ImgDoc.createStream(str(ndb_img_key.id()), streamId, serving_url, geoPoint)
       logging.info("image successfully uploaded")
 
 # [START social]
@@ -450,8 +451,13 @@ def getMoreImages(streamId, pageRange = DEFAULT_PAGE_RANGE, cursor = None):
 class loadMore(BaseHandler):
   def get(self):
     streamId = self.request.get('streamid')
-    cursor = Cursor(urlsafe=self.request.get('cursor'))
-    imgList, next_cursor, more = getMoreImages(streamId = streamId, cursor = cursor)
+    cursorUrl = self.request.get('cursor', default_value = None)
+    cursor = None
+    if cursorUrl:
+      cursor = Cursor(urlsafe=self.request.get('cursor'))
+    pageRange = self.request.get('pageRange', default_value = DEFAULT_PAGE_RANGE)
+    pageRange = int(pageRange)
+    imgList, next_cursor, more = getMoreImages(streamId = streamId, pageRange = pageRange, cursor = cursor)
     result_json = {'images' : imgList,
                     'more' : more}
     if next_cursor:
@@ -530,6 +536,13 @@ class viewall(BaseHandler):
     self.render_template('viewall.html', template_values)
 # [END view_all]
 
+class androidStreamOwner(BaseHandler):
+  def get(self):
+    streamName = self.request.get("streamid")
+    curStream = stream.query(ancestor = streamGroup_key(), filters = stream.name == streamName).get()
+    jsonResult = {'owner' : curStream.owner}
+    self.response.write(json.dumps(jsonResult))
+
 class androidViewAll(BaseHandler):
   def get(self):
     allStreams = stream.query(ancestor = streamGroup_key()).fetch()
@@ -537,6 +550,25 @@ class androidViewAll(BaseHandler):
     jsonResult = [{'name' : s.name,
                    'streamUrl' : self.request.host + '/view?' + urllib.quote(s.name),
                    'coverImageUrl' : s.cover} for s in allStreams]
+    self.response.write(json.dumps(jsonResult))
+
+class androidGetNearbyImg(BaseHandler):
+  def get(self):
+    lat = self.request.get("lat")
+    lon = self.request.get("lon")
+    query = "distance(img_location, geopoint(" + lat + ", " + lon + ")) < 5000"
+    try:
+      index =  ImgDoc.getIndex()
+      search_result = index.search(query)
+    except search.Error:
+      logging.exception('search error')
+      return
+
+    jsonResult = [
+      {'streamName': doc.getImgStream(),
+       'imgUrl' : doc.getImgUrl
+      } for doc in search_result
+    ]
     self.response.write(json.dumps(jsonResult))
 
 # [START trending]

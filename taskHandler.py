@@ -11,6 +11,7 @@ import urllib
 import re
 
 from models import *
+from docs import *
 from baseHandler import BaseHandler
 
 from google.appengine.ext import ndb
@@ -92,4 +93,5 @@ class deleteservingurl(BaseHandler):
             blobkey = img.gcs_key
             images.delete_serving_url(blobkey)
             blobstore.delete(blobkey)
+            ImgDoc.removeImg(str(img.imgID()))
             img.key.delete()

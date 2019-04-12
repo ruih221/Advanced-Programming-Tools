@@ -15,6 +15,7 @@ app = webapp2.WSGIApplication([
     ('/view', View),
     ('/viewall', viewall),
     ('/androidViewAll', androidViewAll),
+    ('/androidStreamOwner', androidStreamOwner),
     ('/loadMore', loadMore),
     ('/newstream', newStream),
     ('/erroradd', errorAdd),

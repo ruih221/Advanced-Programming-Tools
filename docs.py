@@ -53,6 +53,39 @@ class BaseDocumentManager(object):
         except search.InvalidReuqest:
             return None
 
+class ImgDoc(BaseDocumentManager):
+    INDEX_NAME = "Imgs0"
+
+    IMG_URL = "url"
+    IMG_STREAM = "stream"
+    IMG_GEO = "img_location"
+
+    def getImgUrl(self):
+        return self.getFieldValue(self.IMG_URL)
+
+    def getImgStream(self):
+        return self.getFieldValue(self.IMG_STREAM)
+
+    @classmethod
+    def getDocById(cls, id):
+        return cls.getDoc(id)
+    
+    @classmethod
+    def removeImg(cls, doc_id):
+        cls.removeDoc(doc_id)
+    
+    @classmethod
+    def createStream(
+        cls, ImgId = None, streamName = None, IMG_URL = None, GeoPoint = None
+    ):
+        docField = [
+            search.TextField(name=cls.IMG_URL, value=streamName),
+            search.TextField(name=cls.IMG_STREAM, value=IMG_URL),
+            search.GeoField(name=cls.IMG_GEO, value=GeoPoint)
+        ]
+        doc = search.Document(doc_id=ImgId, fields=docField)
+        ImgDoc.add(doc)
+
 class StreamDoc(BaseDocumentManager):
     INDEX_NAME = 'Streams0'
 

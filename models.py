@@ -28,6 +28,9 @@ class Image(ndb.Model):
     geo = ndb.GeoPtProperty(indexed = False)
     addDate = ndb.DateTimeProperty(auto_now_add = True, required = True)
 
+    def imgID(self):
+        return self.key.id()
+
 class stream(ndb.Model):
     name = ndb.StringProperty()
     tags = ndb.StringProperty(repeated = True)

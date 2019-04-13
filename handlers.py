@@ -265,7 +265,6 @@ class newStream(BaseHandler):
 
 # [START searchStream]
 class searchStream(BaseHandler):
-  @BaseHandler.check_log_in 
   def get(self):
     logging.info("searchstream entry reached")
     query = self.request.get('query')
@@ -301,6 +300,14 @@ class searchStream(BaseHandler):
         if targetStream:
           result.append(targetStream)
       redirect_url = ['/view?' + urllib.urlencode({'streamid': x.name}) for x in result]
+
+    if (self.request.get("isAndroid") == 'True'):
+      jsonResult = [{'name' : s.name,
+                    'streamUrl' : self.request.host + '/view?' + urllib.quote(s.name),
+                    'coverImageUrl' : s.cover} for s in result]
+
+      self.response.write(json.dumps(jsonResult))
+      return
 
     template_values = {
       'number_found' : len(result),
@@ -556,7 +563,8 @@ class androidGetNearbyImg(BaseHandler):
   def get(self):
     lat = self.request.get("lat")
     lon = self.request.get("lon")
-    query = "distance(img_location, geopoint(" + lat + ", " + lon + ")) < 5000"
+    query = "distance(img_location, geopoint(" + lat + ", " + lon + ")) < 50000"
+    
     try:
       index =  ImgDoc.getIndex()
       search_result = index.search(query)
@@ -565,10 +573,24 @@ class androidGetNearbyImg(BaseHandler):
       return
 
     jsonResult = [
-      {'streamName': doc.getImgStream(),
-       'imgUrl' : doc.getImgUrl
+      {'streamName': ImgDoc(doc).getImgStream(),
+       'imgUrl' : ImgDoc(doc).getImgUrl()
       } for doc in search_result
     ]
+    self.response.write(json.dumps(jsonResult))
+  
+class androidGetSubscribedStream(BaseHandler):
+  def get(self):
+    email = self.request.get("email")
+    jsonResult = []
+    allStreams = stream.query(ancestor = streamGroup_key()).fetch()
+    for curStream in allStreams:
+      if userSub.query(ancestor = curStream.key, filters = userSub.Id == email).get():
+        jsonResult.append(
+          {'name': curStream.name,
+           'streamUrl' : self.request.host + '/view?' + urllib.quote(curStream.name),
+           'coverImageUrl' : curStream.cover}
+        )
     self.response.write(json.dumps(jsonResult))
 
 # [START trending]

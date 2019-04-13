@@ -79,8 +79,8 @@ class ImgDoc(BaseDocumentManager):
         cls, ImgId = None, streamName = None, IMG_URL = None, GeoPoint = None
     ):
         docField = [
-            search.TextField(name=cls.IMG_URL, value=streamName),
-            search.TextField(name=cls.IMG_STREAM, value=IMG_URL),
+            search.TextField(name=cls.IMG_URL, value=IMG_URL),
+            search.TextField(name=cls.IMG_STREAM, value=streamName),
             search.GeoField(name=cls.IMG_GEO, value=GeoPoint)
         ]
         doc = search.Document(doc_id=ImgId, fields=docField)
